@@ -36,7 +36,7 @@ FixBD::FixBD(LAMMPS *lmp, int narg, char **arg) :
   t_target = force->numeric(FLERR,arg[3]);
   gamma = force->numeric(FLERR,arg[4]);
   int seed = force->inumeric(FLERR,arg[5]);
-  
+
   // allocate the random number generator
   random = new RanPark(lmp,seed);
   time_integrate = 1;
@@ -88,14 +88,12 @@ void FixBD::final_integrate()
       gamma_i = gamma / mass[type[i]];
       // in LJ units, t_target is given in kbT/epsilon
 
-      fd_term = sqrt(2 * dt / (gamma_i * t_target));
+      fd_term = sqrt(2 * t_target * dt / gamma_i);
 
       noise_0 = fd_term * random->gaussian();
       noise_1 = fd_term * random->gaussian();
       noise_2 = fd_term * random->gaussian();
 
-//      x[i][0] += dt / gamma_i * f[i][0] + noise_0 + (peclet/gamma_i) * cos(theta[i]) * dt;
-//      x[i][1] += dt / gamma_i * f[i][1] + noise_1 + (peclet/gamma_i) * sin(theta[i]) * dt;
       x[i][0] += dt / gamma_i * f[i][0] + noise_0;
       x[i][1] += dt / gamma_i * f[i][1] + noise_1;
       x[i][2] += dt / gamma_i * f[i][2] + noise_2;
