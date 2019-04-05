@@ -30,7 +30,7 @@ class FixBDInertial : public Fix {
   virtual ~FixBDInertial() {}
   int setmask();
   virtual void init();
-  virtual void post_force();
+  virtual void final_integrate();
 
  protected:
   class RanPark *random;
