@@ -30,6 +30,7 @@ class FixDumbbell : public Fix {
   virtual ~FixDumbbell() {}
   int setmask();
   virtual void init();
+  virtual void post_force(int);
   virtual void final_integrate();
 
  protected:

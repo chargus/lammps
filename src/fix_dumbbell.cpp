@@ -49,6 +49,7 @@ FixDumbbell::FixDumbbell(LAMMPS *lmp, int narg, char **arg) :
 int FixDumbbell::setmask()
 {
   int mask = 0;
+  mask |= POST_FORCE;
   mask |= FINAL_INTEGRATE;
   return mask;
 }
@@ -66,27 +67,15 @@ void FixDumbbell::init()
 
 /* ---------------------------------------------------------------------- */
 
-void FixDumbbell::final_integrate()
+void FixDumbbell::post_force(int /*vflag*/)
 {
-
-  // friction coefficient, this taken to be a property of the solvent
-  // so here gamma_i is gamma / m_i
-  double fd_term = 0.;
   double delx, dely, rsq, r;
-  double noise_0,noise_1,noise_2;
-  double **x = atom->x;
-  double **v = atom->v;
-  double **f = atom->f;
-  double *rmass = atom->rmass;
-  double *mass = atom->mass;
-  int *type = atom->type;
-  int *mask = atom->mask;
   int **bondlist = neighbor->bondlist;
   int nbondlist = neighbor->nbondlist;
-  int nlocal = atom->nlocal;
-  if (igroup == atom->firstgroup) nlocal = atom->nfirst;
+  double **x = atom->x;
+  double **f = atom->f;
 
-  // First add the active force to the already-computed per-atom forces
+  // Add the active force to the already-computed per-atom forces
   for (int n = 0; n < nbondlist; n++) {
     int i1 = bondlist[n][0];
     int i2 = bondlist[n][1];
@@ -105,6 +94,25 @@ void FixDumbbell::final_integrate()
     f[i2][0] += f_active * (-dely); // unit vector rotated CCW
     f[i2][1] += f_active * (delx);
   }
+}
+
+
+void FixDumbbell::final_integrate()
+{
+
+  // friction coefficient, this taken to be a property of the solvent
+  // so here gamma_i is gamma / m_i
+  double fd_term = 0.;
+  double noise_0,noise_1,noise_2;
+  double **x = atom->x;
+  double **v = atom->v;
+  double **f = atom->f;
+  double *rmass = atom->rmass;
+  double *mass = atom->mass;
+  int *type = atom->type;
+  int *mask = atom->mask;
+  int nlocal = atom->nlocal;
+  if (igroup == atom->firstgroup) nlocal = atom->nfirst;
 
   for (int i = 0; i < nlocal; i++) {
     if (mask[i] & groupbit) {
