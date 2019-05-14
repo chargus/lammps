@@ -37,6 +37,7 @@ class FixDumbbell : public Fix {
   double dt,dtfm;
   double t_target;
   double gamma, gamma_i;
+  double f_active;
 };
 
 }
