@@ -29,16 +29,12 @@ class FixDumbbell : public Fix {
   FixDumbbell(class LAMMPS *, int, char **);
   virtual ~FixDumbbell() {}
   int setmask();
-  virtual void init();
   virtual void post_force(int);
-  virtual void final_integrate();
 
  protected:
   class RanPark *random;
-  double dt,dtfm;
-  double t_target;
-  double gamma, gamma_i;
   double f_active;
+  bool convect;
 };
 
 }

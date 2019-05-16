@@ -27,21 +27,24 @@ using namespace FixConst;
 
 /* ---------------------------------------------------------------------- */
 
-// example command
-// fix dumbbell TEMP GAMMA FA SEED
+// example command:
+// fix dumbbell ACTIVEFORCE
 FixDumbbell::FixDumbbell(LAMMPS *lmp, int narg, char **arg) :
   Fix(lmp, narg, arg)
 {
-  if (strcmp(style,"dumbbell") != 0 && narg < 6)
-    error->all(FLERR,"Illegal fix dumbbell command");
-  t_target = force->numeric(FLERR,arg[3]);
-  gamma = force->numeric(FLERR,arg[4]);
-  f_active = force->numeric(FLERR,arg[5]);
-  int seed = force->inumeric(FLERR,arg[6]);
-
-  // allocate the random number generator
-  random = new RanPark(lmp,seed);
-  time_integrate = 1;
+  if (strcmp(style,"dumbbell") != 0 && narg < 4)
+    error->all(FLERR,"Illegal fix dumbbell command: not enough args");
+  f_active = force->numeric(FLERR,arg[3]);
+  convect = false;
+  if (narg == 5){
+    if (strcmp(arg[4],"rotate") == 0)
+      convect = false;
+    else if (strcmp(arg[4],"convect") == 0)
+      convect = true;
+    else
+      error->all(FLERR,
+                 "Only \"rotate\" and \"convect\" are accepted keywords.");
+  }
 }
 
 /* ---------------------------------------------------------------------- */
@@ -50,20 +53,8 @@ int FixDumbbell::setmask()
 {
   int mask = 0;
   mask |= POST_FORCE;
-  mask |= FINAL_INTEGRATE;
   return mask;
 }
-
-/* ---------------------------------------------------------------------- */
-
-void FixDumbbell::init()
-{
-  dt = update->dt;
-}
-
-/* ----------------------------------------------------------------------
-   allow for both per-type and per-atom mass
-------------------------------------------------------------------------- */
 
 /* ---------------------------------------------------------------------- */
 
@@ -95,45 +86,3 @@ void FixDumbbell::post_force(int /*vflag*/)
     f[i2][1] += f_active * (delx);
   }
 }
-
-
-void FixDumbbell::final_integrate()
-{
-
-  // friction coefficient, this taken to be a property of the solvent
-  // so here gamma_i is gamma / m_i
-  double fd_term = 0.;
-  double noise_0,noise_1,noise_2;
-  double **x = atom->x;
-  double **v = atom->v;
-  double **f = atom->f;
-  double *rmass = atom->rmass;
-  double *mass = atom->mass;
-  int *type = atom->type;
-  int *mask = atom->mask;
-  int nlocal = atom->nlocal;
-  if (igroup == atom->firstgroup) nlocal = atom->nfirst;
-
-  for (int i = 0; i < nlocal; i++) {
-    if (mask[i] & groupbit) {
-      // in LJ units, t_target is given in kbT/epsilon
-      fd_term = sqrt(2 * t_target * gamma * dt / mass[type[i]]);
-
-      noise_0 = fd_term * random->gaussian();
-      noise_1 = fd_term * random->gaussian();
-      noise_2 = fd_term * random->gaussian();
-
-      x[i][0] += v[i][0] * dt;
-      x[i][1] += v[i][1] * dt;
-      x[i][2] += v[i][2] * dt;
-
-      v[i][0] += (f[i][0] * dt / mass[type[i]]) - (gamma * v[i][0] * dt) + noise_0;
-      v[i][1] += (f[i][1] * dt / mass[type[i]]) - (gamma * v[i][1] * dt) + noise_1;
-      v[i][2] += (f[i][2] * dt / mass[type[i]]) - (gamma * v[i][2] * dt) + noise_2;
-
-    }
-  }
-}
-
-/* ---------------------------------------------------------------------- */
-
