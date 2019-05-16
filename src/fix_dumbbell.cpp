@@ -25,6 +25,8 @@
 using namespace LAMMPS_NS;
 using namespace FixConst;
 
+enum{CCW,CW,MIXED,CONVECT};
+
 /* ---------------------------------------------------------------------- */
 
 // example command:
@@ -35,15 +37,18 @@ FixDumbbell::FixDumbbell(LAMMPS *lmp, int narg, char **arg) :
   if (strcmp(style,"dumbbell") != 0 && narg < 4)
     error->all(FLERR,"Illegal fix dumbbell command: not enough args");
   f_active = force->numeric(FLERR,arg[3]);
-  convect = false;
+  activestyle = CCW;
   if (narg == 5){
-    if (strcmp(arg[4],"rotate") == 0)
-      convect = false;
+    if (strcmp(arg[4],"ccw") == 0)
+      activestyle = CCW;
+    else if (strcmp(arg[4],"cw") == 0)
+      activestyle = CW;
+    else if (strcmp(arg[4],"mixed") == 0)
+      activestyle = MIXED;
     else if (strcmp(arg[4],"convect") == 0)
-      convect = true;
+      activestyle = CONVECT;
     else
-      error->all(FLERR,
-                 "Only \"rotate\" and \"convect\" are accepted keywords.");
+      error->all(FLERR, "Only {ccw, cw, mixed, convect} are accepted styles.");
   }
 }
 
@@ -79,10 +84,45 @@ void FixDumbbell::post_force(int /*vflag*/)
     delx /= r;
     dely /= r;
 
-    // Apply forces for a net CCW torque.
-    f[i1][0] += f_active * (dely);  // unit vector rotated CW
-    f[i1][1] += f_active * (-delx);
-    f[i2][0] += f_active * (-dely); // unit vector rotated CCW
-    f[i2][1] += f_active * (delx);
+    if (activestyle==CCW){
+      // Apply forces for a net CCW torque.
+      f[i1][0] += f_active * (dely);  // unit vector rotated CW
+      f[i1][1] += f_active * (-delx);
+      f[i2][0] += f_active * (-dely); // unit vector rotated CCW
+      f[i2][1] += f_active * (delx);
+    }
+
+    else if (activestyle==CW){
+      // Apply forces for a net CW torque.
+      f[i1][0] += f_active * (-dely); // unit vector rotated CCW
+      f[i1][1] += f_active * (delx);
+      f[i2][0] += f_active * (dely);  // unit vector rotated CW
+      f[i2][1] += f_active * (-delx);
+    }
+
+    else if (activestyle==MIXED){
+      if (n % 2 == 0){
+      // Apply forces for a net CCW torque.
+      f[i1][0] += f_active * (dely);  // unit vector rotated CW
+      f[i1][1] += f_active * (-delx);
+      f[i2][0] += f_active * (-dely); // unit vector rotated CCW
+      f[i2][1] += f_active * (delx);
+      }
+      else{
+      // Apply forces for a net CW torque.
+      f[i1][0] += f_active * (-dely); // unit vector rotated CCW
+      f[i1][1] += f_active * (delx);
+      f[i2][0] += f_active * (dely);  // unit vector rotated CW
+      f[i2][1] += f_active * (-delx);
+      }
+    }
+
+    else if (activestyle==CONVECT){
+      // Apply convective force along bond axis
+      f[i1][0] += f_active * (delx);
+      f[i1][1] += f_active * (dely);
+      f[i2][0] += f_active * (delx);
+      f[i2][1] += f_active * (dely);
+    }
   }
 }
