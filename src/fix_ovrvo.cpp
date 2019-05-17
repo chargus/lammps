@@ -16,6 +16,7 @@
 #include "fix_ovrvo.h"
 #include "atom.h"
 #include "neighbor.h"
+#include "domain.h"
 #include "force.h"
 #include "update.h"
 #include "error.h"
@@ -38,6 +39,15 @@ FixOVRVO::FixOVRVO(LAMMPS *lmp, int narg, char **arg) :
   gamma = force->numeric(FLERR,arg[4]);
   int seed = force->inumeric(FLERR,arg[5]);
 
+  xflag = force->inumeric(FLERR,arg[6]);
+  yflag = force->inumeric(FLERR,arg[7]);
+  zflag = force->inumeric(FLERR,arg[8]);
+  if ((xflag != 0 && xflag != 1) || (yflag != 0 && yflag != 1)
+      || (zflag != 0 && zflag != 1))
+    error->all(FLERR,"Illegal fix ovrvo command");
+  if (zflag && domain->dimension == 2)
+    error->all(FLERR,"Fix ovrvo cannot use z dimension for 2d system");
+
   // allocate the random number generator
   random = new RanPark(lmp,seed);
   time_integrate = 1;
@@ -58,21 +68,10 @@ int FixOVRVO::setmask()
 void FixOVRVO::init()
 {
   dt = update->dt;
-  double acoeff = exp(-gamma*dt);
-  double bcoeff = sqrt((2. / (gamma*dt)) * tanh(gamma*dt / 2.));
-
-  // Coefficient naming convention: first letter indicates integration step:
-  //     o: Ornstein-Uehlenbeck update
-  //     v: velocity update
-  //     r: position update
-  // The second letter indicates which variable coefficient applies to:
-  //     v: velocity term
-  //     n: random variable term (drawn from standard normal distribution N(0,1))
-  //     f: force term
-  o_coeff_v = sqrt(acoeff);
-  o_coeff_n = sqrt(t_target*(1. - acoeff)); // later modified by mass
-  v_coeff_f = bcoeff*dt/2.; // later modified by mass
-  r_coeff_v = bcoeff*dt;
+  acoeff = exp(-gamma*dt);
+  bcoeff = sqrt((2. / (gamma*dt)) * tanh(gamma*dt / 2.));
+  vcoeff = sqrt(acoeff);
+  ncoeff = sqrt(t_target*(1. - acoeff)); // later modified by mass
 }
 
 /* ----------------------------------------------------------------------
@@ -84,14 +83,13 @@ void FixOVRVO::initial_integrate(int /*vflag*/)
   // Perform Ornstein-Uehlenbeck velocity randomization (O), then
   // update velocities (V) and update positions (R).
 
-  double o_coeff_nm;
-  double v_coeff_fm;
-
   double **x = atom->x;
   double **v = atom->v;
   double **f = atom->f;
   double *rmass = atom->rmass;
   double *mass = atom->mass;
+  double m;
+  double sqrtm;
   int *type = atom->type;
   int *mask = atom->mask;
   int nlocal = atom->nlocal;
@@ -99,28 +97,48 @@ void FixOVRVO::initial_integrate(int /*vflag*/)
 
   for (int i = 0; i < nlocal; i++)
     if (mask[i] & groupbit) {
-      if (rmass) {
-        o_coeff_nm = o_coeff_n / sqrt(rmass[i]);
-        v_coeff_fm = v_coeff_f / rmass[i];
-      }
-      else {
-        o_coeff_nm = o_coeff_n / sqrt(mass[type[i]]);
-        v_coeff_fm = v_coeff_f / mass[type[i]];
-      }
+      if (rmass)
+        m = rmass[i];
+      else
+        m = mass[type[i]];
+      sqrtm = sqrt(m);
+
       // Ornstein-Uehlenbeck velocity randomization (O):
-      v[i][0] = o_coeff_v * v[i][0] + o_coeff_nm * random->gaussian();
-      v[i][1] = o_coeff_v * v[i][1] + o_coeff_nm * random->gaussian();
-      v[i][2] = o_coeff_v * v[i][2] + o_coeff_nm * random->gaussian();
+      if (xflag)
+        v[i][0] = vcoeff * v[i][0] + (ncoeff / sqrtm) * random->gaussian();
+      if (yflag)
+        v[i][1] = vcoeff * v[i][1] + (ncoeff / sqrtm) * random->gaussian();
+      if (zflag)
+        v[i][2] = vcoeff * v[i][2] + (ncoeff / sqrtm) * random->gaussian();
 
       // Velocity update (V):
-      v[i][0] += v_coeff_fm * f[i][0];
-      v[i][1] += v_coeff_fm * f[i][1];
-      v[i][2] += v_coeff_fm * f[i][2];
+      if (xflag)
+        v[i][0] += bcoeff * dt * f[i][0] / (2. * m);
+      else
+        v[i][0] += dt * f[i][0] / (2. * m);
+      if (yflag)
+        v[i][1] += bcoeff * dt * f[i][1] / (2. * m);
+      else
+        v[i][1] += dt * f[i][1] / (2. * m);
+      if (zflag)
+        v[i][2] += bcoeff * dt * f[i][2] / (2. * m);
+      else
+        v[i][2] += dt * f[i][2] / (2. * m);
+
 
       // Position update (R):
-      x[i][0]  += r_coeff_v * v[i][0];
-      x[i][1]  += r_coeff_v * v[i][1];
-      x[i][2]  += r_coeff_v * v[i][2];
+      if (xflag)
+        x[i][0]  += bcoeff * dt * v[i][0];
+      else
+        x[i][0]  += dt * v[i][0];
+      if (yflag)
+        x[i][1]  += bcoeff * dt * v[i][1];
+      else
+        x[i][1]  += dt * v[i][1];
+      if (zflag)
+        x[i][2]  += bcoeff * dt * v[i][2];
+      else
+        x[i][2]  += dt * v[i][2];
     }
 }
 
@@ -131,13 +149,15 @@ void FixOVRVO::final_integrate()
   // Update velocities (V), then perform Ornstein-Uehlenbeck
   // velocity randomization (O).
 
-  double o_coeff_nm;
+  double ncoeff_;
   double v_coeff_fm;
 
   double **v = atom->v;
   double **f = atom->f;
   double *rmass = atom->rmass;
   double *mass = atom->mass;
+  double m;
+  double sqrtm;
   int *type = atom->type;
   int *mask = atom->mask;
   int nlocal = atom->nlocal;
@@ -145,23 +165,33 @@ void FixOVRVO::final_integrate()
 
   for (int i = 0; i < nlocal; i++)
     if (mask[i] & groupbit) {
-      if (rmass) {
-        o_coeff_nm = o_coeff_n / sqrt(rmass[i]);
-        v_coeff_fm = v_coeff_f / rmass[i];
-      }
-      else {
-        o_coeff_nm = o_coeff_n / sqrt(mass[type[i]]);
-        v_coeff_fm = v_coeff_f / mass[type[i]];
-      }
+      if (rmass)
+        m = rmass[i];
+      else
+        m = mass[type[i]];
+      sqrtm = sqrt(m);
+
       // Velocity update (V):
-      v[i][0] += v_coeff_fm * f[i][0];
-      v[i][1] += v_coeff_fm * f[i][1];
-      v[i][2] += v_coeff_fm * f[i][2];
+      if (xflag)
+        v[i][0] += bcoeff * dt * f[i][0] / (2. * m);
+      else
+        v[i][0] += dt * f[i][0] / (2. * m);
+      if (yflag)
+        v[i][1] += bcoeff * dt * f[i][1] / (2. * m);
+      else
+        v[i][1] += dt * f[i][1] / (2. * m);
+      if (zflag)
+        v[i][2] += bcoeff * dt * f[i][2] / (2. * m);
+      else
+        v[i][2] += dt * f[i][2] / (2. * m);
 
       // Ornstein-Uehlenbeck velocity randomization (O):
-      v[i][0] = o_coeff_v * v[i][0] + o_coeff_nm * random->gaussian();
-      v[i][1] = o_coeff_v * v[i][1] + o_coeff_nm * random->gaussian();
-      v[i][2] = o_coeff_v * v[i][2] + o_coeff_nm * random->gaussian();
+      if (xflag)
+        v[i][0] = vcoeff * v[i][0] + (ncoeff / sqrtm) * random->gaussian();
+      if (yflag)
+        v[i][1] = vcoeff * v[i][1] + (ncoeff / sqrtm) * random->gaussian();
+      if (zflag)
+        v[i][2] = vcoeff * v[i][2] + (ncoeff / sqrtm) * random->gaussian();
     }
 }
 

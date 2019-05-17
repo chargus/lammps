@@ -38,7 +38,8 @@ class FixOVRVO : public Fix {
   double dt;
   double t_target;
   double gamma;
-  double o_coeff_v, o_coeff_n, v_coeff_f, r_coeff_v;
+  double acoeff, bcoeff, vcoeff, ncoeff;
+  bool xflag, yflag, zflag;
 };
 
 }
