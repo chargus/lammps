@@ -45,6 +45,8 @@ ComputeActiveStress::ComputeActiveStress(LAMMPS *lmp, int narg, char **arg) :
   Compute(lmp, narg, arg)
 {
   if (narg != 3) error->all(FLERR,"Illegal compute activestress command");
+  int dimension = domain->dimension;
+  if (dimension != 2) error->all(FLERR,"Only 2D stress tensor is supported.");
 
   vector_flag = 1;
   size_vector = 16;      // unraveled 2x2 stress tensors: T^K, T^V, T^S, T^A
@@ -59,36 +61,6 @@ ComputeActiveStress::~ComputeActiveStress()
 {
   delete [] vector;
 }
-
-/* ---------------------------------------------------------------------- */
-
-void ComputeActiveStress::virial_compute()
-{
-  int i;
-  double *T_V, *T_V_all, *T_S, *T_S_all;
-
-  // for (i = 0; i < 4; i++) T_V[i] = 0.0;
-  // for (i = 0; i < 4; i++) T_V[i] = 0.0;
-
-  // for (j = 0; j < nvirial; j++) {
-  //   vcomponent = vptr[j];
-  //   for (i = 0; i < n; i++) v[i] += vcomponent[i];
-  // }
-
-  if (force->pair) T_V = force->pair->virial;
-  if (force->bond) T_S = force->bond->virial;
-
-  // sum across all processors
-  MPI_Allreduce(T_V,T_V_all,4,MPI_DOUBLE,MPI_SUM,world);
-  MPI_Allreduce(T_S,T_S_all,4,MPI_DOUBLE,MPI_SUM,world);
-
-  for (i = 4; i < 8; i++)
-    vector[i] = T_V_all[i];
-
-  for (i = 8; i < 12; i++)
-    vector[i] = T_S_all[i];
-}
-
 
 /* ---------------------------------------------------------------------- */
 
@@ -122,13 +94,62 @@ void ComputeActiveStress::kinetic_compute()
 }
 
 
+/* ---------------------------------------------------------------------- */
+
+void ComputeActiveStress::active_compute()
+{
+
+}
+
+/* ---------------------------------------------------------------------- */
+
+void ComputeActiveStress::virial_compute()
+{
+  int i;
+  double T_V[4], T_V_all[4], T_S[4], T_S_all[4];
+  double *T_V_ptr, *T_S_ptr;
+  for (i = 0; i < 4; i++)
+    T_V[i] = 0.0;
+    T_S[i] = 0.0;
+
+
+  if (force->pair) {
+      T_V_ptr = force->pair->virial;
+      T_V[0] = T_V_ptr[0];
+      T_V[1] = T_V_ptr[3];
+      T_V[2] = T_V_ptr[3];
+      T_V[3] = T_V_ptr[1];
+    }
+  if (force->bond) {
+      T_S_ptr = force->bond->virial;
+      T_S[0] = T_S_ptr[0];
+      T_S[1] = T_S_ptr[3];
+      T_S[2] = T_S_ptr[3];
+      T_S[3] = T_S_ptr[1];
+    }
+
+  // sum across all processors
+  MPI_Allreduce(T_V,T_V_all,4,MPI_DOUBLE,MPI_SUM,world);
+  MPI_Allreduce(T_S,T_S_all,4,MPI_DOUBLE,MPI_SUM,world);
+
+  for (i = 0; i < 4; i++)
+    vector[i+4] = T_V_all[i];
+
+  for (i = 0; i < 4; i++)
+    vector[i+8] = T_S_all[i];
+}
 
 /* ---------------------------------------------------------------------- */
 
 
 void ComputeActiveStress::compute_vector()
 {
+  nktv2p = force->nktv2p;
+  inv_volume = 1.0 / (domain->xprd * domain->yprd);
   kinetic_compute();
+  virial_compute();
+  for (int i = 0; i < 16; i++)
+    vector[i] *= inv_volume * nktv2p;
 }
 
 /* ---------------------------------------------------------------------- */
