@@ -15,6 +15,7 @@
 #include <cstring>
 #include "compute_activestress.h"
 #include "atom.h"
+#include "neighbor.h"
 #include "update.h"
 #include "force.h"
 #include "pair.h"
@@ -44,7 +45,8 @@ for the returned 16-element vector.
 ComputeActiveStress::ComputeActiveStress(LAMMPS *lmp, int narg, char **arg) :
   Compute(lmp, narg, arg)
 {
-  if (narg != 3) error->all(FLERR,"Illegal compute activestress command");
+  if (narg != 4) error->all(FLERR,"Illegal compute activestress command");
+  f_active = force->numeric(FLERR,arg[3]);
   int dimension = domain->dimension;
   if (dimension != 2) error->all(FLERR,"Only 2D stress tensor is supported.");
 
@@ -96,13 +98,6 @@ void ComputeActiveStress::kinetic_compute()
 
 /* ---------------------------------------------------------------------- */
 
-void ComputeActiveStress::active_compute()
-{
-
-}
-
-/* ---------------------------------------------------------------------- */
-
 void ComputeActiveStress::virial_compute()
 {
   int i;
@@ -141,6 +136,39 @@ void ComputeActiveStress::virial_compute()
 
 /* ---------------------------------------------------------------------- */
 
+void ComputeActiveStress::active_compute()
+{
+  int i;
+  double T_A[4], T_A_all[4];
+  double delx, dely, rsq, r;
+  int **bondlist = neighbor->bondlist;
+  int nbondlist = neighbor->nbondlist;
+  double **x = atom->x;
+  for (i = 0; i < 4; i++) T_A[i] = 0.0;
+  for (i = 0; i < nbondlist; i++) {
+    int i1 = bondlist[i][0];
+    int i2 = bondlist[i][1];
+    // type = bondlist[n][2];
+    // Get a unit vector pointing from atom 1 to atom 2 (assuming 2d in xy-plane)
+    delx = x[i2][0] - x[i1][0];
+    dely = x[i2][1] - x[i1][1];
+    rsq = delx*delx + dely*dely;
+    r = sqrt(rsq);
+
+    T_A[0] += f_active * dely * delx;
+    T_A[1] += f_active * dely * dely;
+    T_A[2] -= f_active * delx * delx;
+    T_A[3] -= f_active * delx * dely;
+  }
+
+  MPI_Allreduce(T_A,T_A_all,4,MPI_DOUBLE,MPI_SUM,world);
+
+  for (i = 0; i < 4; i++)
+    vector[i+12] = T_A_all[i];
+}
+
+/* ---------------------------------------------------------------------- */
+
 
 void ComputeActiveStress::compute_vector()
 {
@@ -148,6 +176,7 @@ void ComputeActiveStress::compute_vector()
   inv_volume = 1.0 / (domain->xprd * domain->yprd);
   kinetic_compute();
   virial_compute();
+  active_compute();
   for (int i = 0; i < 16; i++)
     vector[i] *= inv_volume * nktv2p;
 }
