@@ -39,17 +39,27 @@ The stress tensor is decomposed into four components:
 The four values of each component are unraveled and appended in the above order
 for the returned 16-element vector.
 
+If "com" flag is provided, only the center-of-mass velocity of dumbbells
+is used in the kinetic part of the stress tensor.
+
 ---------------------------------------------------------------------- */
 
 
 ComputeActiveStress::ComputeActiveStress(LAMMPS *lmp, int narg, char **arg) :
   Compute(lmp, narg, arg)
 {
-  if (narg != 4) error->all(FLERR,"Illegal compute activestress command");
+  if (narg < 4)
+    error->all(FLERR,"Illegal compute activestress command");
+  if (narg > 4 && strcmp(arg[4],"com") == 0)
+    com=true;
+  else
+    com=false;
   f_active = force->numeric(FLERR,arg[3]);
   int dimension = domain->dimension;
   if (dimension != 2) error->all(FLERR,"Only 2D stress tensor is supported.");
 
+  extvector = 0;
+  timeflag = 1;
   vector_flag = 1;
   size_vector = 16;      // unraveled 2x2 stress tensors: T^K, T^V, T^S, T^A
   extvector = 0;         // stress tensor vector is intensive, not extensive
@@ -69,9 +79,12 @@ ComputeActiveStress::~ComputeActiveStress()
 void ComputeActiveStress::kinetic_compute()
 {
   int i;
+  double vx_com, vy_com;
   double **v = atom->v;
   double *mass = atom->mass;
   double *rmass = atom->rmass;
+  int **bondlist = neighbor->bondlist;
+  int nbondlist = neighbor->nbondlist;
   int *type = atom->type;
   int *mask = atom->mask;
   int nlocal = atom->nlocal;
@@ -79,15 +92,31 @@ void ComputeActiveStress::kinetic_compute()
   double massone,T_K[4], T_K_all[4];
   for (i = 0; i < 4; i++) T_K[i] = 0.0;
 
-  for (i = 0; i < nlocal; i++)
-    if (mask[i] & groupbit) {
-      if (rmass) massone = rmass[i];
-      else massone = mass[type[i]];
-      T_K[0] += massone * v[i][0]*v[i][0];
-      T_K[1] += massone * v[i][0]*v[i][1];
-      T_K[2] += massone * v[i][1]*v[i][0];
-      T_K[3] += massone * v[i][1]*v[i][1];
+  if (com){
+    for (int n = 0; n < nbondlist; n++) {
+      int i1 = bondlist[n][0];
+      int i2 = bondlist[n][1];
+      if (rmass) massone = rmass[i1] + rmass[i2];
+      else massone = mass[type[i1]] + mass[type[i2]];
+      vx_com = (v[i1][0] + v[i2][0]) / 2;  // Assume equal masses
+      vy_com = (v[i1][1] + v[i2][1]) / 2;  // Assume equal masses
+      T_K[0] += massone * vx_com*vx_com;
+      T_K[1] += massone * vx_com*vy_com;
+      T_K[2] += massone * vy_com*vx_com;
+      T_K[3] += massone * vy_com*vy_com;
     }
+  }
+  else{
+    for (i = 0; i < nlocal; i++)
+      if (mask[i] & groupbit) {
+        if (rmass) massone = rmass[i];
+        else massone = mass[type[i]];
+        T_K[0] += massone * v[i][0]*v[i][0];
+        T_K[1] += massone * v[i][0]*v[i][1];
+        T_K[2] += massone * v[i][1]*v[i][0];
+        T_K[3] += massone * v[i][1]*v[i][1];
+      }
+  }
 
   // sum across all processors
   MPI_Allreduce(T_K,T_K_all,4,MPI_DOUBLE,MPI_SUM,world);
@@ -172,6 +201,7 @@ void ComputeActiveStress::active_compute()
 
 void ComputeActiveStress::compute_vector()
 {
+  invoked_vector = update->ntimestep;
   nktv2p = force->nktv2p;
   inv_volume = 1.0 / (domain->xprd * domain->yprd);
   kinetic_compute();

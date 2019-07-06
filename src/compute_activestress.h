@@ -34,6 +34,7 @@ class ComputeActiveStress : public Compute {
   virtual void compute_vector();
   // virtual void compute_array();
  protected:
+  bool com;
   double nktv2p,inv_volume,f_active;
   virtual void kinetic_compute();
   virtual void virial_compute();

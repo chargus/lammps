@@ -35,7 +35,6 @@ class FixDumbbell : public Fix {
   class RanPark *random;
   int activestyle;
   double f_active;
-  bool convect;
 };
 
 }
