@@ -184,10 +184,10 @@ void ComputeActiveStress::active_compute()
     rsq = delx*delx + dely*dely;
     r = sqrt(rsq);
 
-    T_A[0] += f_active * dely * delx;
-    T_A[1] += f_active * dely * dely;
-    T_A[2] -= f_active * delx * delx;
-    T_A[3] -= f_active * delx * dely;
+    T_A[0] += f_active * dely * delx / r;
+    T_A[1] += f_active * dely * dely / r;
+    T_A[2] -= f_active * delx * delx / r;
+    T_A[3] -= f_active * delx * dely / r;
   }
 
   MPI_Allreduce(T_A,T_A_all,4,MPI_DOUBLE,MPI_SUM,world);
