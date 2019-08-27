@@ -44,6 +44,10 @@ FixOVRVORotation::FixOVRVORotation(LAMMPS *lmp, int narg, char **arg) :
   // allocate the random number generator
   random = new RanPark(lmp,seed);
   time_integrate = 1;
+
+  if (force->newton_bond)
+    error->all(FLERR, "To use fix ovrvo/rotation, you must turn off newton bonds "
+               "in the input file, e.g. with 'newton on off'.");
 }
 
 /* ---------------------------------------------------------------------- */
@@ -84,72 +88,75 @@ void FixOVRVORotation::initial_integrate(int /*vflag*/)
   double m, sqrtm;
   double nx1, nx2, ny1, ny2, nz1, nz2;
   int *type = atom->type;
-  int *mask = atom->mask;
   int nlocal = atom->nlocal;
   int **bondlist = neighbor->bondlist;
   int nbondlist = neighbor->nbondlist;
-  if (igroup == atom->firstgroup) nlocal = atom->nfirst;
 
-  for (int i = 0; i < nbondlist; i++) {
-    int i1 = bondlist[i][0];
-    int i2 = bondlist[i][1];
+  for (int n = 0; n < nbondlist; n++) {
+    int i1 = bondlist[n][0];
+    int i2 = bondlist[n][1];
 
     if (rmass)
-      m = rmass[i];
+      m = rmass[n];
     else
-      m = mass[type[i]];
+      m = mass[type[n]];
     sqrtm = sqrt(m);
+
+    if (i1 < nlocal){   // Add force only to real atoms (not ghosts)
 
     // Ornstein-Uehlenbeck velocity randomization (O):
     nx1 = random->gaussian();
-    nx2 = random->gaussian();
     ny1 = random->gaussian();
-    ny2 = random->gaussian();
     nz1 = random->gaussian();
-    nz2 = random->gaussian();
-
     v[i1][0] += (-gamma_t4*(v[i1][0] + v[i2][0])
                 - gamma_r4*(v[i1][0] - v[i2][0])
                 + ncoeff_t*(nx1 + nx2)
                 + ncoeff_r*(nx1 - nx2));
-    v[i2][0] += (-gamma_t4*(v[i2][0] + v[i1][0])
-                - gamma_r4*(v[i2][0] - v[i1][0])
-                + ncoeff_t*(nx2 + nx1)
-                + ncoeff_r*(nx2 - nx1));
-
     v[i1][1] += (-gamma_t4*(v[i1][1] + v[i2][1])
                 - gamma_r4*(v[i1][1] - v[i2][1])
                 + ncoeff_t*(ny1 + ny2)
                 + ncoeff_r*(ny1 - ny2));
-    v[i2][1] += (-gamma_t4*(v[i2][1] + v[i1][1])
-                - gamma_r4*(v[i2][1] - v[i1][1])
-                + ncoeff_t*(ny2 + ny1)
-                + ncoeff_r*(ny2 - ny1));
-
     v[i1][2] += (-gamma_t4*(v[i1][2] + v[i2][2])
                 - gamma_r4*(v[i1][2] - v[i2][2])
                 + ncoeff_t*(nz1 + nz2)
                 + ncoeff_r*(nz1 - nz2));
+    // Velocity update (V):
+    v[i1][0] += dt * f[i1][0] / (2. * m);
+    v[i1][1] += dt * f[i1][1] / (2. * m);
+    v[i1][2] += dt * f[i1][2] / (2. * m);
+    // Position update (R):
+    x[i1][0]  += dt * v[i1][0];
+    x[i1][1]  += dt * v[i1][1];
+    x[i1][2]  += dt * v[i1][2];
+    }
+
+    if (i2 < nlocal){   // Add force only to real atoms (not ghosts)
+
+    // Ornstein-Uehlenbeck velocity randomization (O):
+    nx2 = random->gaussian();
+    ny2 = random->gaussian();
+    nz2 = random->gaussian();
+    v[i2][0] += (-gamma_t4*(v[i2][0] + v[i1][0])
+                - gamma_r4*(v[i2][0] - v[i1][0])
+                + ncoeff_t*(nx2 + nx1)
+                + ncoeff_r*(nx2 - nx1));
+    v[i2][1] += (-gamma_t4*(v[i2][1] + v[i1][1])
+                - gamma_r4*(v[i2][1] - v[i1][1])
+                + ncoeff_t*(ny2 + ny1)
+                + ncoeff_r*(ny2 - ny1));
     v[i2][2] += (-gamma_t4*(v[i2][2] + v[i1][2])
                 - gamma_r4*(v[i2][2] - v[i1][2])
                 + ncoeff_t*(nz2 + nz1)
                 + ncoeff_r*(nz2 - nz1));
-
     // Velocity update (V):
-    v[i1][0] += dt * f[i1][0] / (2. * m);
     v[i2][0] += dt * f[i2][0] / (2. * m);
-    v[i1][1] += dt * f[i1][1] / (2. * m);
     v[i2][1] += dt * f[i2][1] / (2. * m);
-    v[i1][2] += dt * f[i1][2] / (2. * m);
     v[i2][2] += dt * f[i2][2] / (2. * m);
-
     // Position update (R):
-    x[i1][0]  += dt * v[i1][0];
     x[i2][0]  += dt * v[i2][0];
-    x[i1][1]  += dt * v[i1][1];
     x[i2][1]  += dt * v[i2][1];
-    x[i1][2]  += dt * v[i1][2];
     x[i2][2]  += dt * v[i2][2];
+    }
   }
 }
 
@@ -168,64 +175,66 @@ void FixOVRVORotation::final_integrate()
   double m, sqrtm;
   double nx1, nx2, ny1, ny2, nz1, nz2;
   int *type = atom->type;
-  int *mask = atom->mask;
   int nlocal = atom->nlocal;
   int **bondlist = neighbor->bondlist;
   int nbondlist = neighbor->nbondlist;
-  if (igroup == atom->firstgroup) nlocal = atom->nfirst;
 
-  for (int i = 0; i < nbondlist; i++) {
-    int i1 = bondlist[i][0];
-    int i2 = bondlist[i][1];
+  for (int n = 0; n < nbondlist; n++) {
+    int i1 = bondlist[n][0];
+    int i2 = bondlist[n][1];
 
     if (rmass)
-      m = rmass[i];
+      m = rmass[n];
     else
-      m = mass[type[i]];
+      m = mass[type[n]];
     sqrtm = sqrt(m);
+
+    if (i1 < nlocal){   // Add force only to real atoms (not ghosts)
 
     // Velocity update (V):
     v[i1][0] += dt * f[i1][0] / (2. * m);
-    v[i2][0] += dt * f[i2][0] / (2. * m);
     v[i1][1] += dt * f[i1][1] / (2. * m);
-    v[i2][1] += dt * f[i2][1] / (2. * m);
     v[i1][2] += dt * f[i1][2] / (2. * m);
-    v[i2][2] += dt * f[i2][2] / (2. * m);
-
     // Ornstein-Uehlenbeck velocity randomization (O):
     nx1 = random->gaussian();
-    nx2 = random->gaussian();
     ny1 = random->gaussian();
-    ny2 = random->gaussian();
     nz1 = random->gaussian();
-    nz2 = random->gaussian();
-
     v[i1][0] += (-gamma_t4*(v[i1][0] + v[i2][0])
                 - gamma_r4*(v[i1][0] - v[i2][0])
                 + ncoeff_t*(nx1 + nx2)
                 + ncoeff_r*(nx1 - nx2));
-    v[i2][0] += (-gamma_t4*(v[i2][0] + v[i1][0])
-                - gamma_r4*(v[i2][0] - v[i1][0])
-                + ncoeff_t*(nx2 + nx1)
-                + ncoeff_r*(nx2 - nx1));
-
     v[i1][1] += (-gamma_t4*(v[i1][1] + v[i2][1])
                 - gamma_r4*(v[i1][1] - v[i2][1])
                 + ncoeff_t*(ny1 + ny2)
                 + ncoeff_r*(ny1 - ny2));
-    v[i2][1] += (-gamma_t4*(v[i2][1] + v[i1][1])
-                - gamma_r4*(v[i2][1] - v[i1][1])
-                + ncoeff_t*(ny2 + ny1)
-                + ncoeff_r*(ny2 - ny1));
-
     v[i1][2] += (-gamma_t4*(v[i1][2] + v[i2][2])
                 - gamma_r4*(v[i1][2] - v[i2][2])
                 + ncoeff_t*(nz1 + nz2)
                 + ncoeff_r*(nz1 - nz2));
+    }
+    if (i2 < nlocal){   // Add force only to real atoms (not ghosts)
+
+    // Velocity update (V):
+    v[i2][0] += dt * f[i2][0] / (2. * m);
+    v[i2][1] += dt * f[i2][1] / (2. * m);
+    v[i2][2] += dt * f[i2][2] / (2. * m);
+    // Ornstein-Uehlenbeck velocity randomization (O):
+    nx2 = random->gaussian();
+    ny2 = random->gaussian();
+    nz2 = random->gaussian();
+    v[i2][0] += (-gamma_t4*(v[i2][0] + v[i1][0])
+                - gamma_r4*(v[i2][0] - v[i1][0])
+                + ncoeff_t*(nx2 + nx1)
+                + ncoeff_r*(nx2 - nx1));
+    v[i2][1] += (-gamma_t4*(v[i2][1] + v[i1][1])
+                - gamma_r4*(v[i2][1] - v[i1][1])
+                + ncoeff_t*(ny2 + ny1)
+                + ncoeff_r*(ny2 - ny1));
     v[i2][2] += (-gamma_t4*(v[i2][2] + v[i1][2])
                 - gamma_r4*(v[i2][2] - v[i1][2])
                 + ncoeff_t*(nz2 + nz1)
                 + ncoeff_r*(nz2 - nz1));
+    }
   }
 }
 
