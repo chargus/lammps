@@ -18,18 +18,21 @@
 #include "neighbor.h"
 #include "domain.h"
 #include "force.h"
+#include "comm.h"
 #include "update.h"
 #include "error.h"
 #include "math.h"
 #include "random_park.h"
+#include <iostream>
 
+using namespace std;
 using namespace LAMMPS_NS;
 using namespace FixConst;
 
 /* ---------------------------------------------------------------------- */
 
 // example command
-// fix ovrvo/rotation TEMP GAMMA_T GAMMA_R SEED
+// fix ovrvo/rotation TEMP_T TEMP_R GAMMA_T GAMMA_R SEED
 FixOVRVORotation::FixOVRVORotation(LAMMPS *lmp, int narg, char **arg) :
   Fix(lmp, narg, arg)
 {
@@ -39,10 +42,10 @@ FixOVRVORotation::FixOVRVORotation(LAMMPS *lmp, int narg, char **arg) :
   tr_target = force->numeric(FLERR,arg[4]);
   gamma_t = force->numeric(FLERR,arg[5]);
   gamma_r = force->numeric(FLERR,arg[6]);
-  int seed = force->inumeric(FLERR,arg[7]);
+  seed = force->inumeric(FLERR,arg[7]);
 
   // allocate the random number generator
-  random = new RanPark(lmp,seed);
+  random = new RanPark(lmp,seed + comm->me);
   time_integrate = 1;
 
   if (force->newton_bond)
@@ -86,15 +89,18 @@ void FixOVRVORotation::initial_integrate(int /*vflag*/)
   double *rmass = atom->rmass;
   double *mass = atom->mass;
   double m, sqrtm;
-  double nx1, nx2, ny1, ny2, nz1, nz2;
+  int i1, i2;
+  double nx1, nx2, ny1, ny2;
   int *type = atom->type;
   int nlocal = atom->nlocal;
   int **bondlist = neighbor->bondlist;
   int nbondlist = neighbor->nbondlist;
+  imageint *image = atom->image;
+  double remapped_x [3];
 
   for (int n = 0; n < nbondlist; n++) {
-    int i1 = bondlist[n][0];
-    int i2 = bondlist[n][1];
+    // int i1 = bondlist[n][0];
+    // int i2 = bondlist[n][1];
 
     if (rmass)
       m = rmass[n];
@@ -102,60 +108,91 @@ void FixOVRVORotation::initial_integrate(int /*vflag*/)
       m = mass[type[n]];
     sqrtm = sqrt(m);
 
-    if (i1 < nlocal){   // Add force only to real atoms (not ghosts)
+    if (x[bondlist[n][0]][0] < x[bondlist[n][1]][0]) { // Set i1 as left atom
+      // cout << "IN if statement  " << x[bondlist[n][0]][0] << "  " << x[bondlist[n][1]][0] << endl;
+      i1 = bondlist[n][0];
+      i2 = bondlist[n][1];
+    }
+    else {
+      // cout << "IN else statement  " << x[bondlist[n][0]][0] << "  " << x[bondlist[n][1]][0] << endl;
+      i2 = bondlist[n][0];
+      i1 = bondlist[n][1];
+    }
+    // float floatseed
+    // int seed = (int)abs(1000000*(x[i1][0]-x[i2][0]));
+    // cout << "seed:  " << seed << endl;
+    // for (i = 0; i < 5; i++) random->uniform(); // warm up the RNG
+    // double dx [3];
+    // for (int i = 0; i < 3; i++) {
+    //   dx[i] = abs(x[i2][i]-x[i1][i]);
+    //   cout << abs(x[i2][i]-x[i1][i]) << endl;
+    //   cout << dx[i] << endl;}
+    // random->reset(seed, x[i1]);
+    // cout << "oldx, newx:  " << x[i2][0] << "  " << remapped_x[0] << endl;
+    // if (x[i1][0] < x[i2][0]) {
+      for (int i = 0; i < 3; i++) remapped_x[i] = x[i1][i];
+      domain->remap(remapped_x, image[i1]);
+      random->reset(seed, remapped_x);  // Use left atom position to set seed
+      nx1 = random->gaussian();
+      ny1 = random->gaussian();
+      nx2 = random->gaussian();
+      ny2 = random->gaussian();
+    // }
+    // else {
+    //   for (int i = 0; i < 3; i++) remapped_x[i] = x[i2][i];
+    //   domain->remap(remapped_x, image[i2]);
+    //   random->reset(seed, remapped_x);  // Use left atom position to set seed
+    //   nx2 = random->gaussian();
+    //   ny2 = random->gaussian();
+    //   nx1 = random->gaussian();
+    //   ny1 = random->gaussian();
+    // }
+      // cout << n << "  " << i1 << "  " << x[i1][0] << "  " << remapped_x[0] << "  " << nx1 << endl;
+      // cout << n << "  " << i2 << "  " << x[i2][0] << "  " << remapped_x[0] << "  " << nx2 << endl;
 
-    // Ornstein-Uehlenbeck velocity randomization (O):
-    nx1 = random->gaussian();
-    ny1 = random->gaussian();
-    nz1 = random->gaussian();
-    v[i1][0] += (-gamma_t4*(v[i1][0] + v[i2][0])
-                - gamma_r4*(v[i1][0] - v[i2][0])
-                + ncoeff_t*(nx1 + nx2)
-                + ncoeff_r*(nx1 - nx2));
-    v[i1][1] += (-gamma_t4*(v[i1][1] + v[i2][1])
-                - gamma_r4*(v[i1][1] - v[i2][1])
-                + ncoeff_t*(ny1 + ny2)
-                + ncoeff_r*(ny1 - ny2));
-    v[i1][2] += (-gamma_t4*(v[i1][2] + v[i2][2])
-                - gamma_r4*(v[i1][2] - v[i2][2])
-                + ncoeff_t*(nz1 + nz2)
-                + ncoeff_r*(nz1 - nz2));
-    // Velocity update (V):
-    v[i1][0] += dt * f[i1][0] / (2. * m);
-    v[i1][1] += dt * f[i1][1] / (2. * m);
-    v[i1][2] += dt * f[i1][2] / (2. * m);
-    // Position update (R):
-    x[i1][0]  += dt * v[i1][0];
-    x[i1][1]  += dt * v[i1][1];
-    x[i1][2]  += dt * v[i1][2];
+
+    // cout << update->ntimestep << "  " << n << "  " << i1 << "  " << x[i1][0] << "  " <<
+    // - gamma_r4*(v[i1][0] - v[i2][0]) << "  " << v[i1][0] << "  " << v[i2][0] << endl;
+
+    // cout << update->ntimestep << "  " << n << "  " << i2 << "  " << x[i2][0] << "  " <<
+    // - gamma_r4*(v[i2][0] - v[i1][0]) << "  " << v[i2][0] << "  " << v[i1][0] << endl;
+    if (i1 < nlocal){   // Integrate only the real atoms (not ghosts)
+
+      // Ornstein-Uehlenbeck velocity randomization (O):
+
+      v[i1][0] += (-gamma_t4*(v[i1][0] + v[i2][0])
+                  - gamma_r4*(v[i1][0] - v[i2][0])
+                  + ncoeff_t*(nx1 + nx2)
+                  + ncoeff_r*(nx1 - nx2));
+      v[i1][1] += (-gamma_t4*(v[i1][1] + v[i2][1])
+                  - gamma_r4*(v[i1][1] - v[i2][1])
+                  + ncoeff_t*(ny1 + ny2)
+                  + ncoeff_r*(ny1 - ny2));
+      // Velocity update (V):
+      v[i1][0] += dt * f[i1][0] / (2. * m);
+      v[i1][1] += dt * f[i1][1] / (2. * m);
+      // Position update (R):
+      x[i1][0]  += dt * v[i1][0];
+      x[i1][1]  += dt * v[i1][1];
     }
 
-    if (i2 < nlocal){   // Add force only to real atoms (not ghosts)
+    if (i2 < nlocal){   // Integrate only the real atoms (not ghosts)
 
-    // Ornstein-Uehlenbeck velocity randomization (O):
-    nx2 = random->gaussian();
-    ny2 = random->gaussian();
-    nz2 = random->gaussian();
-    v[i2][0] += (-gamma_t4*(v[i2][0] + v[i1][0])
-                - gamma_r4*(v[i2][0] - v[i1][0])
-                + ncoeff_t*(nx2 + nx1)
-                + ncoeff_r*(nx2 - nx1));
-    v[i2][1] += (-gamma_t4*(v[i2][1] + v[i1][1])
-                - gamma_r4*(v[i2][1] - v[i1][1])
-                + ncoeff_t*(ny2 + ny1)
-                + ncoeff_r*(ny2 - ny1));
-    v[i2][2] += (-gamma_t4*(v[i2][2] + v[i1][2])
-                - gamma_r4*(v[i2][2] - v[i1][2])
-                + ncoeff_t*(nz2 + nz1)
-                + ncoeff_r*(nz2 - nz1));
-    // Velocity update (V):
-    v[i2][0] += dt * f[i2][0] / (2. * m);
-    v[i2][1] += dt * f[i2][1] / (2. * m);
-    v[i2][2] += dt * f[i2][2] / (2. * m);
-    // Position update (R):
-    x[i2][0]  += dt * v[i2][0];
-    x[i2][1]  += dt * v[i2][1];
-    x[i2][2]  += dt * v[i2][2];
+      // Ornstein-Uehlenbeck velocity randomization (O):
+      v[i2][0] += (-gamma_t4*(v[i2][0] + v[i1][0])
+                  - gamma_r4*(v[i2][0] - v[i1][0])
+                  + ncoeff_t*(nx2 + nx1)
+                  + ncoeff_r*(nx2 - nx1));
+      v[i2][1] += (-gamma_t4*(v[i2][1] + v[i1][1])
+                  - gamma_r4*(v[i2][1] - v[i1][1])
+                  + ncoeff_t*(ny2 + ny1)
+                  + ncoeff_r*(ny2 - ny1));
+      // Velocity update (V):
+      v[i2][0] += dt * f[i2][0] / (2. * m);
+      v[i2][1] += dt * f[i2][1] / (2. * m);
+      // Position update (R):
+      x[i2][0]  += dt * v[i2][0];
+      x[i2][1]  += dt * v[i2][1];
     }
   }
 }
@@ -173,15 +210,18 @@ void FixOVRVORotation::final_integrate()
   double *rmass = atom->rmass;
   double *mass = atom->mass;
   double m, sqrtm;
-  double nx1, nx2, ny1, ny2, nz1, nz2;
+  int i1, i2;
+  double nx1, nx2, ny1, ny2;
   int *type = atom->type;
   int nlocal = atom->nlocal;
   int **bondlist = neighbor->bondlist;
   int nbondlist = neighbor->nbondlist;
+  imageint *image = atom->image;
+  double remapped_x [3];
 
   for (int n = 0; n < nbondlist; n++) {
-    int i1 = bondlist[n][0];
-    int i2 = bondlist[n][1];
+    // int i1 = bondlist[n][0];
+    // int i2 = bondlist[n][1];
 
     if (rmass)
       m = rmass[n];
@@ -189,51 +229,62 @@ void FixOVRVORotation::final_integrate()
       m = mass[type[n]];
     sqrtm = sqrt(m);
 
-    if (i1 < nlocal){   // Add force only to real atoms (not ghosts)
-
-    // Velocity update (V):
-    v[i1][0] += dt * f[i1][0] / (2. * m);
-    v[i1][1] += dt * f[i1][1] / (2. * m);
-    v[i1][2] += dt * f[i1][2] / (2. * m);
-    // Ornstein-Uehlenbeck velocity randomization (O):
-    nx1 = random->gaussian();
-    ny1 = random->gaussian();
-    nz1 = random->gaussian();
-    v[i1][0] += (-gamma_t4*(v[i1][0] + v[i2][0])
-                - gamma_r4*(v[i1][0] - v[i2][0])
-                + ncoeff_t*(nx1 + nx2)
-                + ncoeff_r*(nx1 - nx2));
-    v[i1][1] += (-gamma_t4*(v[i1][1] + v[i2][1])
-                - gamma_r4*(v[i1][1] - v[i2][1])
-                + ncoeff_t*(ny1 + ny2)
-                + ncoeff_r*(ny1 - ny2));
-    v[i1][2] += (-gamma_t4*(v[i1][2] + v[i2][2])
-                - gamma_r4*(v[i1][2] - v[i2][2])
-                + ncoeff_t*(nz1 + nz2)
-                + ncoeff_r*(nz1 - nz2));
+    if (x[bondlist[n][0]][0] < x[bondlist[n][1]][0]) { // Set i1 as left atom
+      i1 = bondlist[n][0];
+      i2 = bondlist[n][1];
     }
-    if (i2 < nlocal){   // Add force only to real atoms (not ghosts)
+    else {
+      i2 = bondlist[n][0];
+      i1 = bondlist[n][1];
+    }
+    // if (x[i1][0] < x[i2][0]) {
+      for (int i = 0; i < 3; i++) remapped_x[i] = x[i1][i];
+      domain->remap(remapped_x, image[i1]);
+      random->reset(seed, remapped_x);  // Use left atom position to set seed
+      nx1 = random->gaussian();
+      ny1 = random->gaussian();
+      nx2 = random->gaussian();
+      ny2 = random->gaussian();
+    // }
+    // else {
+    //   for (int i = 0; i < 3; i++) remapped_x[i] = x[i2][i];
+    //   domain->remap(remapped_x, image[i2]);
+    //   random->reset(seed, remapped_x);  // Use left atom position to set seed
+    //   nx2 = random->gaussian();
+    //   ny2 = random->gaussian();
+    //   nx1 = random->gaussian();
+    //   ny1 = random->gaussian();
+    // }
 
-    // Velocity update (V):
-    v[i2][0] += dt * f[i2][0] / (2. * m);
-    v[i2][1] += dt * f[i2][1] / (2. * m);
-    v[i2][2] += dt * f[i2][2] / (2. * m);
-    // Ornstein-Uehlenbeck velocity randomization (O):
-    nx2 = random->gaussian();
-    ny2 = random->gaussian();
-    nz2 = random->gaussian();
-    v[i2][0] += (-gamma_t4*(v[i2][0] + v[i1][0])
-                - gamma_r4*(v[i2][0] - v[i1][0])
-                + ncoeff_t*(nx2 + nx1)
-                + ncoeff_r*(nx2 - nx1));
-    v[i2][1] += (-gamma_t4*(v[i2][1] + v[i1][1])
-                - gamma_r4*(v[i2][1] - v[i1][1])
-                + ncoeff_t*(ny2 + ny1)
-                + ncoeff_r*(ny2 - ny1));
-    v[i2][2] += (-gamma_t4*(v[i2][2] + v[i1][2])
-                - gamma_r4*(v[i2][2] - v[i1][2])
-                + ncoeff_t*(nz2 + nz1)
-                + ncoeff_r*(nz2 - nz1));
+    if (i1 < nlocal){   // Integrate only the real atoms (not ghosts)
+
+      // Velocity update (V):
+      v[i1][0] += dt * f[i1][0] / (2. * m);
+      v[i1][1] += dt * f[i1][1] / (2. * m);
+      // Ornstein-Uehlenbeck velocity randomization (O):
+      v[i1][0] += (-gamma_t4*(v[i1][0] + v[i2][0])
+                  - gamma_r4*(v[i1][0] - v[i2][0])
+                  + ncoeff_t*(nx1 + nx2)
+                  + ncoeff_r*(nx1 - nx2));
+      v[i1][1] += (-gamma_t4*(v[i1][1] + v[i2][1])
+                  - gamma_r4*(v[i1][1] - v[i2][1])
+                  + ncoeff_t*(ny1 + ny2)
+                  + ncoeff_r*(ny1 - ny2));
+    }
+    if (i2 < nlocal){   // Integrate only the real atoms (not ghosts)
+
+      // Velocity update (V):
+      v[i2][0] += dt * f[i2][0] / (2. * m);
+      v[i2][1] += dt * f[i2][1] / (2. * m);
+      // Ornstein-Uehlenbeck velocity randomization (O):
+      v[i2][0] += (-gamma_t4*(v[i2][0] + v[i1][0])
+                  - gamma_r4*(v[i2][0] - v[i1][0])
+                  + ncoeff_t*(nx2 + nx1)
+                  + ncoeff_r*(nx2 - nx1));
+      v[i2][1] += (-gamma_t4*(v[i2][1] + v[i1][1])
+                  - gamma_r4*(v[i2][1] - v[i1][1])
+                  + ncoeff_t*(ny2 + ny1)
+                  + ncoeff_r*(ny2 - ny1));
     }
   }
 }

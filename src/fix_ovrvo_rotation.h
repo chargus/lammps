@@ -37,6 +37,7 @@ class FixOVRVORotation : public Fix {
   class RanPark *random;
   double dt, tt_target, tr_target, ncoeff_t, ncoeff_r;
   double gamma_t, gamma_r, gamma_t4, gamma_r4;
+  int seed;
 };
 
 }
