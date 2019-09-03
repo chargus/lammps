@@ -24,6 +24,7 @@
 #include "math.h"
 #include "random_park.h"
 #include <iostream>
+#include <iomanip>
 
 using namespace std;
 using namespace LAMMPS_NS;
@@ -51,6 +52,11 @@ FixOVRVORotation::FixOVRVORotation(LAMMPS *lmp, int narg, char **arg) :
   if (force->newton_bond)
     error->all(FLERR, "To use fix ovrvo/rotation, you must turn off newton bonds "
                "in the input file, e.g. with 'newton on off'.");
+
+  if (!comm->ghost_velocity)
+    error->all(FLERR, "To use fix ovrvo/rotation, you must turn on ghost atom "
+               "velocity in the input file with 'comm_modify vel yes'.");
+
 }
 
 /* ---------------------------------------------------------------------- */
@@ -99,9 +105,6 @@ void FixOVRVORotation::initial_integrate(int /*vflag*/)
   double remapped_x [3];
 
   for (int n = 0; n < nbondlist; n++) {
-    // int i1 = bondlist[n][0];
-    // int i2 = bondlist[n][1];
-
     if (rmass)
       m = rmass[n];
     else
@@ -109,53 +112,27 @@ void FixOVRVORotation::initial_integrate(int /*vflag*/)
     sqrtm = sqrt(m);
 
     if (x[bondlist[n][0]][0] < x[bondlist[n][1]][0]) { // Set i1 as left atom
-      // cout << "IN if statement  " << x[bondlist[n][0]][0] << "  " << x[bondlist[n][1]][0] << endl;
       i1 = bondlist[n][0];
       i2 = bondlist[n][1];
     }
     else {
-      // cout << "IN else statement  " << x[bondlist[n][0]][0] << "  " << x[bondlist[n][1]][0] << endl;
       i2 = bondlist[n][0];
       i1 = bondlist[n][1];
     }
-    // float floatseed
-    // int seed = (int)abs(1000000*(x[i1][0]-x[i2][0]));
-    // cout << "seed:  " << seed << endl;
-    // for (i = 0; i < 5; i++) random->uniform(); // warm up the RNG
-    // double dx [3];
-    // for (int i = 0; i < 3; i++) {
-    //   dx[i] = abs(x[i2][i]-x[i1][i]);
-    //   cout << abs(x[i2][i]-x[i1][i]) << endl;
-    //   cout << dx[i] << endl;}
-    // random->reset(seed, x[i1]);
-    // cout << "oldx, newx:  " << x[i2][0] << "  " << remapped_x[0] << endl;
-    // if (x[i1][0] < x[i2][0]) {
-      for (int i = 0; i < 3; i++) remapped_x[i] = x[i1][i];
-      domain->remap(remapped_x, image[i1]);
-      random->reset(seed, remapped_x);  // Use left atom position to set seed
-      nx1 = random->gaussian();
-      ny1 = random->gaussian();
-      nx2 = random->gaussian();
-      ny2 = random->gaussian();
-    // }
-    // else {
-    //   for (int i = 0; i < 3; i++) remapped_x[i] = x[i2][i];
-    //   domain->remap(remapped_x, image[i2]);
-    //   random->reset(seed, remapped_x);  // Use left atom position to set seed
-    //   nx2 = random->gaussian();
-    //   ny2 = random->gaussian();
-    //   nx1 = random->gaussian();
-    //   ny1 = random->gaussian();
-    // }
-      // cout << n << "  " << i1 << "  " << x[i1][0] << "  " << remapped_x[0] << "  " << nx1 << endl;
-      // cout << n << "  " << i2 << "  " << x[i2][0] << "  " << remapped_x[0] << "  " << nx2 << endl;
+    // Seed RNG using rounded position of leftmost atom in dumbbell
+    for (int i = 0; i < 3; i++) remapped_x[i] = x[i1][i];
+    domain->remap(remapped_x);
+    for (int i = 0; i < 3; i++) remapped_x[i] = (double)round(remapped_x[i] * 10000000)/10000000;
+    random->reset(seed, remapped_x);
+    nx1 = random->gaussian();
+    ny1 = random->gaussian();
+    nx2 = random->gaussian();
+    ny2 = random->gaussian();
 
+      // cout << std::setprecision(16)
+      // << update->ntimestep << "  " << n << "  " << i1 << "  " << x[i1][0] << "  "
+      // << remapped_x[0] << "  " << remapped_x[1] << "  " << remapped_x[2] << "  " << nx1 << "  " << endl;
 
-    // cout << update->ntimestep << "  " << n << "  " << i1 << "  " << x[i1][0] << "  " <<
-    // - gamma_r4*(v[i1][0] - v[i2][0]) << "  " << v[i1][0] << "  " << v[i2][0] << endl;
-
-    // cout << update->ntimestep << "  " << n << "  " << i2 << "  " << x[i2][0] << "  " <<
-    // - gamma_r4*(v[i2][0] - v[i1][0]) << "  " << v[i2][0] << "  " << v[i1][0] << endl;
     if (i1 < nlocal){   // Integrate only the real atoms (not ghosts)
 
       // Ornstein-Uehlenbeck velocity randomization (O):
@@ -203,7 +180,6 @@ void FixOVRVORotation::final_integrate()
 {
   // Update velocities (V), then perform Ornstein-Uehlenbeck
   // velocity randomization (O).
-
   double **x = atom->x;
   double **v = atom->v;
   double **f = atom->f;
@@ -220,9 +196,6 @@ void FixOVRVORotation::final_integrate()
   double remapped_x [3];
 
   for (int n = 0; n < nbondlist; n++) {
-    // int i1 = bondlist[n][0];
-    // int i2 = bondlist[n][1];
-
     if (rmass)
       m = rmass[n];
     else
@@ -237,24 +210,15 @@ void FixOVRVORotation::final_integrate()
       i2 = bondlist[n][0];
       i1 = bondlist[n][1];
     }
-    // if (x[i1][0] < x[i2][0]) {
-      for (int i = 0; i < 3; i++) remapped_x[i] = x[i1][i];
-      domain->remap(remapped_x, image[i1]);
-      random->reset(seed, remapped_x);  // Use left atom position to set seed
-      nx1 = random->gaussian();
-      ny1 = random->gaussian();
-      nx2 = random->gaussian();
-      ny2 = random->gaussian();
-    // }
-    // else {
-    //   for (int i = 0; i < 3; i++) remapped_x[i] = x[i2][i];
-    //   domain->remap(remapped_x, image[i2]);
-    //   random->reset(seed, remapped_x);  // Use left atom position to set seed
-    //   nx2 = random->gaussian();
-    //   ny2 = random->gaussian();
-    //   nx1 = random->gaussian();
-    //   ny1 = random->gaussian();
-    // }
+    // Seed RNG using rounded position of leftmost atom in dumbbell
+    for (int i = 0; i < 3; i++) remapped_x[i] = x[i1][i];
+    domain->remap(remapped_x);
+    for (int i = 0; i < 3; i++) remapped_x[i] = (double)round(remapped_x[i] * 10000000)/10000000;
+    random->reset(seed, remapped_x);
+    nx1 = random->gaussian();
+    ny1 = random->gaussian();
+    nx2 = random->gaussian();
+    ny2 = random->gaussian();
 
     if (i1 < nlocal){   // Integrate only the real atoms (not ghosts)
 
@@ -262,6 +226,7 @@ void FixOVRVORotation::final_integrate()
       v[i1][0] += dt * f[i1][0] / (2. * m);
       v[i1][1] += dt * f[i1][1] / (2. * m);
       // Ornstein-Uehlenbeck velocity randomization (O):
+
       v[i1][0] += (-gamma_t4*(v[i1][0] + v[i2][0])
                   - gamma_r4*(v[i1][0] - v[i2][0])
                   + ncoeff_t*(nx1 + nx2)
@@ -271,6 +236,7 @@ void FixOVRVORotation::final_integrate()
                   + ncoeff_t*(ny1 + ny2)
                   + ncoeff_r*(ny1 - ny2));
     }
+
     if (i2 < nlocal){   // Integrate only the real atoms (not ghosts)
 
       // Velocity update (V):

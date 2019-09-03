@@ -17,6 +17,7 @@
 #include "atom.h"
 #include "neighbor.h"
 #include "domain.h"
+#include "comm.h"
 #include "force.h"
 #include "update.h"
 #include "error.h"
@@ -49,7 +50,7 @@ FixOVRVO::FixOVRVO(LAMMPS *lmp, int narg, char **arg) :
     error->all(FLERR,"Fix ovrvo cannot use z dimension for 2d system");
 
   // allocate the random number generator
-  random = new RanPark(lmp,seed);
+  random = new RanPark(lmp,seed + comm->me);
   time_integrate = 1;
 }
 
