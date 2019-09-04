@@ -139,12 +139,12 @@ void FixOVRVORotation::initial_integrate(int /*vflag*/)
 
       v[i1][0] += (-gamma_t4*(v[i1][0] + v[i2][0])
                   - gamma_r4*(v[i1][0] - v[i2][0])
-                  + ncoeff_t*(nx1 + nx2)
-                  + ncoeff_r*(nx1 - nx2));
+                  + (ncoeff_t/sqrtm)*(nx1 + nx2)
+                  + (ncoeff_r/sqrtm)*(nx1 - nx2));
       v[i1][1] += (-gamma_t4*(v[i1][1] + v[i2][1])
                   - gamma_r4*(v[i1][1] - v[i2][1])
-                  + ncoeff_t*(ny1 + ny2)
-                  + ncoeff_r*(ny1 - ny2));
+                  + (ncoeff_t/sqrtm)*(ny1 + ny2)
+                  + (ncoeff_r/sqrtm)*(ny1 - ny2));
       // Velocity update (V):
       v[i1][0] += dt * f[i1][0] / (2. * m);
       v[i1][1] += dt * f[i1][1] / (2. * m);
@@ -158,12 +158,12 @@ void FixOVRVORotation::initial_integrate(int /*vflag*/)
       // Ornstein-Uehlenbeck velocity randomization (O):
       v[i2][0] += (-gamma_t4*(v[i2][0] + v[i1][0])
                   - gamma_r4*(v[i2][0] - v[i1][0])
-                  + ncoeff_t*(nx2 + nx1)
-                  + ncoeff_r*(nx2 - nx1));
+                  + (ncoeff_t/sqrtm)*(nx2 + nx1)
+                  + (ncoeff_r/sqrtm)*(nx2 - nx1));
       v[i2][1] += (-gamma_t4*(v[i2][1] + v[i1][1])
                   - gamma_r4*(v[i2][1] - v[i1][1])
-                  + ncoeff_t*(ny2 + ny1)
-                  + ncoeff_r*(ny2 - ny1));
+                  + (ncoeff_t/sqrtm)*(ny2 + ny1)
+                  + (ncoeff_r/sqrtm)*(ny2 - ny1));
       // Velocity update (V):
       v[i2][0] += dt * f[i2][0] / (2. * m);
       v[i2][1] += dt * f[i2][1] / (2. * m);
@@ -229,12 +229,12 @@ void FixOVRVORotation::final_integrate()
 
       v[i1][0] += (-gamma_t4*(v[i1][0] + v[i2][0])
                   - gamma_r4*(v[i1][0] - v[i2][0])
-                  + ncoeff_t*(nx1 + nx2)
-                  + ncoeff_r*(nx1 - nx2));
+                  + (ncoeff_t/sqrtm)*(nx1 + nx2)
+                  + (ncoeff_r/sqrtm)*(nx1 - nx2));
       v[i1][1] += (-gamma_t4*(v[i1][1] + v[i2][1])
                   - gamma_r4*(v[i1][1] - v[i2][1])
-                  + ncoeff_t*(ny1 + ny2)
-                  + ncoeff_r*(ny1 - ny2));
+                  + (ncoeff_t/sqrtm)*(ny1 + ny2)
+                  + (ncoeff_r/sqrtm)*(ny1 - ny2));
     }
 
     if (i2 < nlocal){   // Integrate only the real atoms (not ghosts)
@@ -245,12 +245,12 @@ void FixOVRVORotation::final_integrate()
       // Ornstein-Uehlenbeck velocity randomization (O):
       v[i2][0] += (-gamma_t4*(v[i2][0] + v[i1][0])
                   - gamma_r4*(v[i2][0] - v[i1][0])
-                  + ncoeff_t*(nx2 + nx1)
-                  + ncoeff_r*(nx2 - nx1));
+                  + (ncoeff_t/sqrtm)*(nx2 + nx1)
+                  + (ncoeff_r/sqrtm)*(nx2 - nx1));
       v[i2][1] += (-gamma_t4*(v[i2][1] + v[i1][1])
                   - gamma_r4*(v[i2][1] - v[i1][1])
-                  + ncoeff_t*(ny2 + ny1)
-                  + ncoeff_r*(ny2 - ny1));
+                  + (ncoeff_t/sqrtm)*(ny2 + ny1)
+                  + (ncoeff_r/sqrtm)*(ny2 - ny1));
     }
   }
 }
