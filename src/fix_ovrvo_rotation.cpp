@@ -102,7 +102,9 @@ void FixOVRVORotation::initial_integrate(int /*vflag*/)
   int **bondlist = neighbor->bondlist;
   int nbondlist = neighbor->nbondlist;
   imageint *image = atom->image;
-  double remapped_x [3];
+  double remapped_x [3];  // Position array for setting RNG seed
+  double vt1 [3];  // Temporary velocity array for atom 1
+  double vt2 [3];  // Temporary velocity array for atom 2
 
   for (int n = 0; n < nbondlist; n++) {
     if (rmass)
@@ -111,7 +113,7 @@ void FixOVRVORotation::initial_integrate(int /*vflag*/)
       m = mass[type[n]];
     sqrtm = sqrt(m);
 
-    if (x[bondlist[n][0]][0] < x[bondlist[n][1]][0]) { // Set i1 as left atom
+    if (x[bondlist[n][0]][1] < x[bondlist[n][1]][1]) { // Set i1 as left atom
       i1 = bondlist[n][0];
       i2 = bondlist[n][1];
     }
@@ -119,30 +121,33 @@ void FixOVRVORotation::initial_integrate(int /*vflag*/)
       i2 = bondlist[n][0];
       i1 = bondlist[n][1];
     }
-    // Seed RNG using rounded position of leftmost atom in dumbbell
-    for (int i = 0; i < 3; i++) remapped_x[i] = x[i1][i];
-    domain->remap(remapped_x);
-    for (int i = 0; i < 3; i++) remapped_x[i] = (double)round(remapped_x[i] * 10000000)/10000000;
-    random->reset(seed, remapped_x);
+
+    for (int j = 0; j < 3; j++) {  // Initialize temporary array of velocities
+      vt1[j] = v[i1][j];
+      vt2[j] = v[i2][j];
+    }
+
+    //Seed RNG using rounded position of leftmost atom in dumbbell
+    for (int i = 0; i < 3; i++) remapped_x[i] = x[i1][i]; // Set positions
+    domain->remap(remapped_x);                            // Map back into domain
+    for (int i = 0; i < 3; i++) {
+      remapped_x[i] = (double)round(remapped_x[i] * 10000000)/10000000;  // Round
+    }
+    random->reset(seed, remapped_x);                      // Seed RNG with position
     nx1 = random->gaussian();
     ny1 = random->gaussian();
     nx2 = random->gaussian();
     ny2 = random->gaussian();
 
-      // cout << std::setprecision(16)
-      // << update->ntimestep << "  " << n << "  " << i1 << "  " << x[i1][0] << "  "
-      // << remapped_x[0] << "  " << remapped_x[1] << "  " << remapped_x[2] << "  " << nx1 << "  " << endl;
-
     if (i1 < nlocal){   // Integrate only the real atoms (not ghosts)
 
       // Ornstein-Uehlenbeck velocity randomization (O):
-
-      v[i1][0] += (-gamma_t4*(v[i1][0] + v[i2][0])
-                  - gamma_r4*(v[i1][0] - v[i2][0])
+      v[i1][0] += (-gamma_t4*(vt1[0] + vt2[0])
+                  - gamma_r4*(vt1[0] - vt2[0])
                   + (ncoeff_t/sqrtm)*(nx1 + nx2)
                   + (ncoeff_r/sqrtm)*(nx1 - nx2));
-      v[i1][1] += (-gamma_t4*(v[i1][1] + v[i2][1])
-                  - gamma_r4*(v[i1][1] - v[i2][1])
+      v[i1][1] += (-gamma_t4*(vt1[1] + vt2[1])
+                  - gamma_r4*(vt1[1] - vt2[1])
                   + (ncoeff_t/sqrtm)*(ny1 + ny2)
                   + (ncoeff_r/sqrtm)*(ny1 - ny2));
       // Velocity update (V):
@@ -156,12 +161,12 @@ void FixOVRVORotation::initial_integrate(int /*vflag*/)
     if (i2 < nlocal){   // Integrate only the real atoms (not ghosts)
 
       // Ornstein-Uehlenbeck velocity randomization (O):
-      v[i2][0] += (-gamma_t4*(v[i2][0] + v[i1][0])
-                  - gamma_r4*(v[i2][0] - v[i1][0])
+      v[i2][0] += (-gamma_t4*(vt2[0] + vt1[0])
+                  - gamma_r4*(vt2[0] - vt1[0])
                   + (ncoeff_t/sqrtm)*(nx2 + nx1)
                   + (ncoeff_r/sqrtm)*(nx2 - nx1));
-      v[i2][1] += (-gamma_t4*(v[i2][1] + v[i1][1])
-                  - gamma_r4*(v[i2][1] - v[i1][1])
+      v[i2][1] += (-gamma_t4*(vt2[1] + vt1[1])
+                  - gamma_r4*(vt2[1] - vt1[1])
                   + (ncoeff_t/sqrtm)*(ny2 + ny1)
                   + (ncoeff_r/sqrtm)*(ny2 - ny1));
       // Velocity update (V):
@@ -180,6 +185,7 @@ void FixOVRVORotation::final_integrate()
 {
   // Update velocities (V), then perform Ornstein-Uehlenbeck
   // velocity randomization (O).
+
   double **x = atom->x;
   double **v = atom->v;
   double **f = atom->f;
@@ -193,7 +199,9 @@ void FixOVRVORotation::final_integrate()
   int **bondlist = neighbor->bondlist;
   int nbondlist = neighbor->nbondlist;
   imageint *image = atom->image;
-  double remapped_x [3];
+  double remapped_x [3];  // Position array for setting RNG seed
+  double vt1 [3];  // Temporary velocity array for atom 1
+  double vt2 [3];  // Temporary velocity array for atom 2
 
   for (int n = 0; n < nbondlist; n++) {
     if (rmass)
@@ -202,7 +210,7 @@ void FixOVRVORotation::final_integrate()
       m = mass[type[n]];
     sqrtm = sqrt(m);
 
-    if (x[bondlist[n][0]][0] < x[bondlist[n][1]][0]) { // Set i1 as left atom
+    if (x[bondlist[n][0]][1] < x[bondlist[n][1]][1]) { // Set i1 as left atom
       i1 = bondlist[n][0];
       i2 = bondlist[n][1];
     }
@@ -210,11 +218,19 @@ void FixOVRVORotation::final_integrate()
       i2 = bondlist[n][0];
       i1 = bondlist[n][1];
     }
-    // Seed RNG using rounded position of leftmost atom in dumbbell
-    for (int i = 0; i < 3; i++) remapped_x[i] = x[i1][i];
-    domain->remap(remapped_x);
-    for (int i = 0; i < 3; i++) remapped_x[i] = (double)round(remapped_x[i] * 10000000)/10000000;
-    random->reset(seed, remapped_x);
+
+    for (int j = 0; j < 3; j++) {  // Initialize temporary array of velocities
+      vt1[j] = v[i1][j];
+      vt2[j] = v[i2][j];
+    }
+
+    //Seed RNG using rounded position of leftmost atom in dumbbell
+    for (int i = 0; i < 3; i++) remapped_x[i] = x[i1][i]; // Set positions
+    domain->remap(remapped_x);                            // Map back into domain
+    for (int i = 0; i < 3; i++) {
+      remapped_x[i] = (double)round(remapped_x[i] * 10000000)/10000000;  // Round
+    }
+    random->reset(seed, remapped_x);                      // Seed RNG with position
     nx1 = random->gaussian();
     ny1 = random->gaussian();
     nx2 = random->gaussian();
@@ -226,13 +242,12 @@ void FixOVRVORotation::final_integrate()
       v[i1][0] += dt * f[i1][0] / (2. * m);
       v[i1][1] += dt * f[i1][1] / (2. * m);
       // Ornstein-Uehlenbeck velocity randomization (O):
-
-      v[i1][0] += (-gamma_t4*(v[i1][0] + v[i2][0])
-                  - gamma_r4*(v[i1][0] - v[i2][0])
+      v[i1][0] += (-gamma_t4*(vt1[0] + vt2[0])
+                  - gamma_r4*(vt1[0] - vt2[0])
                   + (ncoeff_t/sqrtm)*(nx1 + nx2)
                   + (ncoeff_r/sqrtm)*(nx1 - nx2));
-      v[i1][1] += (-gamma_t4*(v[i1][1] + v[i2][1])
-                  - gamma_r4*(v[i1][1] - v[i2][1])
+      v[i1][1] += (-gamma_t4*(vt1[1] + vt2[1])
+                  - gamma_r4*(vt1[1] - vt2[1])
                   + (ncoeff_t/sqrtm)*(ny1 + ny2)
                   + (ncoeff_r/sqrtm)*(ny1 - ny2));
     }
@@ -243,12 +258,12 @@ void FixOVRVORotation::final_integrate()
       v[i2][0] += dt * f[i2][0] / (2. * m);
       v[i2][1] += dt * f[i2][1] / (2. * m);
       // Ornstein-Uehlenbeck velocity randomization (O):
-      v[i2][0] += (-gamma_t4*(v[i2][0] + v[i1][0])
-                  - gamma_r4*(v[i2][0] - v[i1][0])
+      v[i2][0] += (-gamma_t4*(vt2[0] + vt1[0])
+                  - gamma_r4*(vt2[0] - vt1[0])
                   + (ncoeff_t/sqrtm)*(nx2 + nx1)
                   + (ncoeff_r/sqrtm)*(nx2 - nx1));
-      v[i2][1] += (-gamma_t4*(v[i2][1] + v[i1][1])
-                  - gamma_r4*(v[i2][1] - v[i1][1])
+      v[i2][1] += (-gamma_t4*(vt2[1] + vt1[1])
+                  - gamma_r4*(vt2[1] - vt1[1])
                   + (ncoeff_t/sqrtm)*(ny2 + ny1)
                   + (ncoeff_r/sqrtm)*(ny2 - ny1));
     }
