@@ -23,10 +23,7 @@
 #include "error.h"
 #include "math.h"
 #include "random_park.h"
-#include <iostream>
-#include <iomanip>
 
-using namespace std;
 using namespace LAMMPS_NS;
 using namespace FixConst;
 
@@ -76,8 +73,8 @@ void FixOVRVORotation::init()
   dt = update->dt;
   gamma_t4 = gamma_t * dt / 4.;
   gamma_r4 = gamma_r * dt / 4.;
-  ncoeff_t = sqrt(tt_target * gamma_t * dt) / 2.; // later modified by mass
-  ncoeff_r = sqrt(tr_target * gamma_r * dt) / 2.; // later modified by mass
+  ncoeff_t = sqrt(tt_target * gamma_t * dt / 8.); // later modified by mass
+  ncoeff_r = sqrt(tr_target * gamma_r * dt / 8.); // later modified by mass
 }
 
 /* ----------------------------------------------------------------------
