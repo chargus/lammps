@@ -18,18 +18,12 @@
 #include "neighbor.h"
 #include "atom.h"
 #include "update.h"
+#include "modify.h"
 #include "comm.h"
 #include "force.h"
-#include "pair.h"
-#include "bond.h"
-#include "modify.h"
-#include "fix.h"
 #include "memory.h"
 #include "error.h"
-#include <iostream>
-#include <iomanip>
 
-using namespace std;
 using namespace LAMMPS_NS;
 
 /* ---------------------------------------------------------------------- */
@@ -76,59 +70,17 @@ void ComputeDumbbellAngle::compute_peratom()
   int **bondlist = neighbor->bondlist;
   int nbondlist = neighbor->nbondlist;
 
-  // // clear local stress array
-  // for (i = 0; i < ntotal; i++)
-  //   for (j = 0; j < 4; j++)
-  //     stress[i][j] = 0.0;
-  // add in per-atom contributions from each force
-
   for (int n = 0; n < nbondlist; n++)
     {
       i1 = bondlist[n][0];
       i2 = bondlist[n][1];
       dx = x[i2][0] - x[i1][0];
       dy = x[i2][1] - x[i1][1];
-      // angle = atan2(abs(dy), abs(dx));
-      // angle = abs(dy);
-      angle = atan(abs(dy/dx));
-      // printf("\nAngle: %2.8f", angle);
+      angle = atan(fabs(dy/dx));
       angles[i1] = angle;
       angles[i2] = angle;
     }
 }
-
-// /* ---------------------------------------------------------------------- */
-
-// int ComputeDumbbellAngle::pack_reverse_comm(int n, int first, double *buf)
-// {
-//   int i,m,last;
-
-//   m = 0;
-//   last = first + n;
-//   for (i = first; i < last; i++) {
-//     buf[m++] = stress[i][0];
-//     buf[m++] = stress[i][1];
-//     buf[m++] = stress[i][2];
-//     buf[m++] = stress[i][3];
-//   }
-//   return m;
-// }
-
-// /* ---------------------------------------------------------------------- */
-
-// void ComputeDumbbellAngle::unpack_reverse_comm(int n, int *list, double *buf)
-// {
-//   int i,j,m;
-
-//   m = 0;
-//   for (i = 0; i < n; i++) {
-//     j = list[i];
-//     stress[j][0] += buf[m++];
-//     stress[j][1] += buf[m++];
-//     stress[j][2] += buf[m++];
-//     stress[j][3] += buf[m++];
-//   }
-// }
 
 /* ----------------------------------------------------------------------
    memory usage of local atom-based array
