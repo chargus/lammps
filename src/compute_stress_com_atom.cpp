@@ -90,11 +90,21 @@ void ComputeStressCOMAtom::init()
 
 void ComputeStressCOMAtom::compute_peratom()
 {
-  int i,j;
+  int i,j,i1,i2;
   double onemass;
   int nlocal = atom->nlocal;
   int ntotal = nlocal;
+  int **bondlist = neighbor->bondlist;
+  int nbondlist = neighbor->nbondlist;
   int *mask = atom->mask;
+  double **v = atom->v;
+  double *mass = atom->mass;
+  double *rmass = atom->rmass;
+  int *type = atom->type;
+  double mvv2e = force->mvv2e;
+  double massone;
+  double vcom [2];  // Temporary array for COM velocty
+
 
 
   if (force->newton) ntotal += atom->nghost;
@@ -122,50 +132,43 @@ void ComputeStressCOMAtom::compute_peratom()
   // include kinetic energy term for each atom in group
   // mvv2e converts mv^2 to energy
 
-  double **v = atom->v;
-  double *mass = atom->mass;
-  double *rmass = atom->rmass;
-  int *type = atom->type;
-  double mvv2e = force->mvv2e;
-  double massone;
-
-  if (biasflag == NOBIAS)
+  for (int n = 0; n < nbondlist; n++)
     {
-      for (i = 0; i < nlocal; i++)
+      // Use the dumbbell COM velocity for both atoms
+      i1 = bondlist[n][0];
+      i2 = bondlist[n][1];
+      if (biasflag == NOBIAS)
         {
-          if (mask[i] & groupbit)
-            {
-              if (rmass) massone = mvv2e * rmass[i];
-              else massone = mvv2e * mass[type[i]];
-              stress[i][0] += massone * v[i][0]*v[i][0];
-              stress[i][1] += massone * v[i][0]*v[i][1];
-              stress[i][2] += massone * v[i][1]*v[i][0];
-              stress[i][3] += massone * v[i][1]*v[i][1];
-            }
+          vcom[0] = 0.5 * (v[i1][0]+v[i2][0]);
+          vcom[1] = 0.5 * (v[i1][1]+v[i2][1]);
         }
-    }
-
-  else
-    {
-      // invoke temperature if it hasn't been already
-      // this insures bias factor is pre-computed
-
-      if (keflag && temperature->invoked_scalar != update->ntimestep)
-        temperature->compute_scalar();
-
-      for (i = 0; i < nlocal; i++)
+      else
         {
-          if (mask[i] & groupbit)
-            {
-              if (rmass) massone = mvv2e * rmass[i];
-              else massone = mvv2e * mass[type[i]];
-              temperature->remove_bias(i,v[i]);
-              stress[i][0] += massone * v[i][0]*v[i][0];
-              stress[i][1] += massone * v[i][0]*v[i][1];
-              stress[i][2] += massone * v[i][1]*v[i][0];
-              stress[i][3] += massone * v[i][1]*v[i][1];
-              temperature->restore_bias(i,v[i]);
-            }
+
+          if (mask[i1] & groupbit) temperature->remove_bias(i1,v[i1]);
+          if (mask[i2] & groupbit) temperature->remove_bias(i2,v[i2]);
+          vcom[0] = 0.5 * (v[i1][0]+v[i2][0]);
+          vcom[1] = 0.5 * (v[i1][1]+v[i2][1]);
+          if (mask[i1] & groupbit) temperature->restore_bias(i1,v[i1]);
+          if (mask[i2] & groupbit) temperature->restore_bias(i2,v[i2]);
+        }
+      if (mask[i1] & groupbit)
+        {
+          if (rmass) massone = mvv2e * rmass[i1];
+          else massone = mvv2e * mass[type[i1]];
+          stress[i1][0] += massone * vcom[0] * vcom[0];
+          stress[i1][1] += massone * vcom[0] * vcom[1];
+          stress[i1][2] += massone * vcom[1] * vcom[0];
+          stress[i1][3] += massone * vcom[1] * vcom[1];
+        }
+      if (mask[i2] & groupbit)  // Add the same thing to the other atom
+        {
+          if (rmass) massone = mvv2e * rmass[i2];
+          else massone = mvv2e * mass[type[i2]];
+          stress[i2][0] += massone * vcom[0] * vcom[0];
+          stress[i2][1] += massone * vcom[0] * vcom[1];
+          stress[i2][2] += massone * vcom[1] * vcom[0];
+          stress[i2][3] += massone * vcom[1] * vcom[1];
         }
     }
 
