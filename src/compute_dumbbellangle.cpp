@@ -33,7 +33,12 @@ ComputeDumbbellAngle::ComputeDumbbellAngle(LAMMPS *lmp, int narg, char **arg) :
   angles(NULL)
 
 {
-  if (narg != 3) error->all(FLERR,"Illegal compute dumbbellangle/atom command");
+  if (narg < 3) error->all(FLERR,"Illegal compute dumbbellangle/atom command");
+  comflag = 0;
+  if (narg == 4)
+    {
+      if (strcmp(arg[3],"com") == 0) comflag = 1;
+    }
   peratom_flag = 1;
   size_peratom_cols = 0;
   nmax = 0;
@@ -69,16 +74,35 @@ void ComputeDumbbellAngle::compute_peratom()
   int nlocal = atom->nlocal;
   int **bondlist = neighbor->bondlist;
   int nbondlist = neighbor->nbondlist;
+  int **anglelist = neighbor->anglelist;
+  int nanglelist = neighbor->nanglelist;
 
-  for (int n = 0; n < nbondlist; n++)
+  if (comflag)
     {
-      i1 = bondlist[n][0];
-      i2 = bondlist[n][1];
-      dx = x[i2][0] - x[i1][0];
-      dy = x[i2][1] - x[i1][1];
-      angle = atan(fabs(dy/dx));
-      angles[i1] = angle;
-      angles[i2] = angle;
+      for (int n = 0; n < nanglelist; n++)
+        {
+          i1 = anglelist[n][0];
+          i2 = anglelist[n][1];
+          dx = x[i2][0] - x[i1][0];
+          dy = x[i2][1] - x[i1][1];
+          angle = atan(fabs(dy/dx));
+          angles[i1] = angle;
+          angles[i2] = angle;
+        }
+    }
+
+  else
+    {
+      for (int n = 0; n < nbondlist; n++)
+        {
+          i1 = bondlist[n][0];
+          i2 = bondlist[n][1];
+          dx = x[i2][0] - x[i1][0];
+          dy = x[i2][1] - x[i1][1];
+          angle = atan(fabs(dy/dx));
+          angles[i1] = angle;
+          angles[i2] = angle;
+        }
     }
 }
 

@@ -33,7 +33,7 @@ class ComputeDumbbellAngle : public Compute {
   double memory_usage();
 
  private:
-  int nmax;
+  int nmax, comflag;
   double *angles;
 };
 
