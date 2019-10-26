@@ -36,8 +36,8 @@ class ComputeActiveStress : public Compute {
  protected:
   bool com;
   double nktv2p,inv_volume,f_active;
-  virtual void kinetic_compute();
-  virtual void virial_compute();
+  // virtual void kinetic_compute();
+  // virtual void virial_compute();
   virtual void active_compute();
 
 };

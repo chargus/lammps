@@ -521,7 +521,7 @@ void FixAveCorrelate::end_of_step()
       fprintf(fp,"%d %d %d",i+1,i*nevery,count[i]);
       if (count[i])
         for (j = 0; j < npair; j++)
-          fprintf(fp," %g",prefactor*corr[i][j]/count[i]);
+          fprintf(fp," %8.16f",prefactor*corr[i][j]/count[i]);
       else
         for (j = 0; j < npair; j++)
           fprintf(fp," 0.0");
