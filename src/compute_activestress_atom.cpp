@@ -45,9 +45,9 @@ ComputeActivestressAtom::ComputeActivestressAtom(LAMMPS *lmp, int narg, char **a
   timeflag = 1;
   comm_reverse = 4;
   nmax = 0;
-  keflag = 1;
-  pairflag = 1;
-  bondflag = 1;
+  keflag = 0;
+  pairflag = 0;
+  bondflag = 0;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -85,70 +85,70 @@ void ComputeActivestressAtom::compute_peratom()
   // ntotal includes ghosts if either newton flag is set
 
   int nlocal = atom->nlocal;
-  int npair = nlocal;
-  int nbond = nlocal;
-  int ntotal = nlocal;
-  if (force->newton) npair += atom->nghost;
-  if (force->newton_bond) nbond += atom->nghost;
-  if (force->newton) ntotal += atom->nghost;
+  // int npair = nlocal;
+  // int nbond = nlocal;
+  // int ntotal = nlocal;
+  // if (force->newton) npair += atom->nghost;
+  // if (force->newton_bond) nbond += atom->nghost;
+  // if (force->newton) ntotal += atom->nghost;
 
-  // clear local stress array
-  for (i = 0; i < ntotal; i++)
-    for (j = 0; j < 4; j++)
-      stress[i][j] = 0.0;
+  // // clear local stress array
+  // for (i = 0; i < ntotal; i++)
+  //   for (j = 0; j < 4; j++)
+  //     stress[i][j] = 0.0;
 
-  // add in per-atom contributions from each force
-  if (pairflag && force->pair) {
-    double **vatom = force->pair->vatom;
-    for (i = 0; i < npair; i++)
-      stress[i][0] += vatom[i][0];
-      stress[i][1] += vatom[i][3];
-      stress[i][2] += vatom[i][3];
-      stress[i][3] += vatom[i][1];
-  }
-  if (bondflag && force->bond) {
-    double **vatom = force->bond->vatom;
-    for (i = 0; i < nbond; i++)
-      stress[i][0] += vatom[i][0];
-      stress[i][1] += vatom[i][3];
-      stress[i][2] += vatom[i][3];
-      stress[i][3] += vatom[i][1];
-  }
+  // // add in per-atom contributions from each force
+  // if (pairflag && force->pair) {
+  //   double **vatom = force->pair->vatom;
+  //   for (i = 0; i < npair; i++)
+  //     stress[i][0] += vatom[i][0];
+  //     stress[i][1] += vatom[i][3];
+  //     stress[i][2] += vatom[i][3];
+  //     stress[i][3] += vatom[i][1];
+  // }
+  // if (bondflag && force->bond) {
+  //   double **vatom = force->bond->vatom;
+  //   for (i = 0; i < nbond; i++)
+  //     stress[i][0] += vatom[i][0];
+  //     stress[i][1] += vatom[i][3];
+  //     stress[i][2] += vatom[i][3];
+  //     stress[i][3] += vatom[i][1];
+  // }
 
-  // communicate ghost virials between neighbor procs
-  if (force->newton)
-    comm->reverse_comm_compute(this);
+  // // communicate ghost virials between neighbor procs
+  // if (force->newton)
+  //   comm->reverse_comm_compute(this);
 
-  // zero virial of atoms not in group
-  // only do this after comm since ghost contributions must be included
+  // // zero virial of atoms not in group
+  // // only do this after comm since ghost contributions must be included
   int *mask = atom->mask;
-  for (i = 0; i < nlocal; i++)
-    if (!(mask[i] & groupbit)) {
-      stress[i][0] = 0.0;
-      stress[i][1] = 0.0;
-      stress[i][2] = 0.0;
-      stress[i][3] = 0.0;
-    }
+  // for (i = 0; i < nlocal; i++)
+  //   if (!(mask[i] & groupbit)) {
+  //     stress[i][0] = 0.0;
+  //     stress[i][1] = 0.0;
+  //     stress[i][2] = 0.0;
+  //     stress[i][3] = 0.0;
+  //   }
 
-  // include kinetic energy term for each atom in group
-  // mvv2e converts mv^2 to energy
+  // // include kinetic energy term for each atom in group
+  // // mvv2e converts mv^2 to energy
 
-  double **v = atom->v;
-  double *mass = atom->mass;
-  double *rmass = atom->rmass;
-  int *type = atom->type;
-  double mvv2e = force->mvv2e;
-  double massone;
+  // double **v = atom->v;
+  // double *mass = atom->mass;
+  // double *rmass = atom->rmass;
+  // int *type = atom->type;
+  // double mvv2e = force->mvv2e;
+  // double massone;
 
-  for (i = 0; i < nlocal; i++)
-    if (mask[i] & groupbit) {
-      if (rmass) massone = mvv2e * rmass[i];
-      else massone = mvv2e * mass[type[i]];
-      stress[i][0] += massone * v[i][0]*v[i][0];
-      stress[i][1] += massone * v[i][0]*v[i][1];
-      stress[i][2] += massone * v[i][1]*v[i][0];
-      stress[i][3] += massone * v[i][1]*v[i][1];
-    }
+  // for (i = 0; i < nlocal; i++)
+  //   if (mask[i] & groupbit) {
+  //     if (rmass) massone = mvv2e * rmass[i];
+  //     else massone = mvv2e * mass[type[i]];
+  //     stress[i][0] += massone * v[i][0]*v[i][0];
+  //     stress[i][1] += massone * v[i][0]*v[i][1];
+  //     stress[i][2] += massone * v[i][1]*v[i][0];
+  //     stress[i][3] += massone * v[i][1]*v[i][1];
+  //   }
 
   // include the asymmetric active force contribution to the stress tensor
   double delx, dely, rsq, r;
