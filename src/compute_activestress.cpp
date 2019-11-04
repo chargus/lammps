@@ -160,27 +160,37 @@ ComputeActiveStress::~ComputeActiveStress()
 
 void ComputeActiveStress::active_compute()
 {
-  int i;
+  int i, n, i1, i2;
   double T_A[4], T_A_all[4];
   double delx, dely, rsq, r;
   int **bondlist = neighbor->bondlist;
   int nbondlist = neighbor->nbondlist;
+  int nlocal = atom->nlocal;
   double **x = atom->x;
-  for (i = 0; i < 4; i++) T_A[i] = 0.0;
-  for (i = 0; i < nbondlist; i++) {
-    int i1 = bondlist[i][0];
-    int i2 = bondlist[i][1];
-    // type = bondlist[n][2];
-    // Get a unit vector pointing from atom 1 to atom 2 (assuming 2d in xy-plane)
-    delx = x[i2][0] - x[i1][0];
-    dely = x[i2][1] - x[i1][1];
-    rsq = delx*delx + dely*dely;
-    r = sqrt(rsq);
+  for (n = 0; n < 4; n++) T_A[n] = 0.0;
+  for (n = 0; n < nbondlist; n++) {
+    // int i1 = bondlist[n][0];
+    // int i2 = bondlist[n][1];
+    if (x[bondlist[n][0]][1] < x[bondlist[n][1]][1]) { // Set i1 as left atom
+      i1 = bondlist[n][0];
+      i2 = bondlist[n][1];
+    }
+    else {
+      i2 = bondlist[n][0];
+      i1 = bondlist[n][1];
+    }
+    if (i1 < nlocal) {  // Only tally contribution if first atom is not ghost
+      // Get a unit vector pointing from atom 1 to atom 2 (assuming 2d in xy-plane)
+      delx = x[i2][0] - x[i1][0];
+      dely = x[i2][1] - x[i1][1];
+      rsq = delx*delx + dely*dely;
+      r = sqrt(rsq);
 
-    T_A[0] += f_active * dely * delx / r;
-    T_A[1] += f_active * dely * dely / r;
-    T_A[2] -= f_active * delx * delx / r;
-    T_A[3] -= f_active * delx * dely / r;
+      T_A[0] += f_active * dely * delx / r;
+      T_A[1] += f_active * dely * dely / r;
+      T_A[2] -= f_active * delx * delx / r;
+      T_A[3] -= f_active * delx * dely / r;
+    }
   }
 
   MPI_Allreduce(T_A,T_A_all,4,MPI_DOUBLE,MPI_SUM,world);
