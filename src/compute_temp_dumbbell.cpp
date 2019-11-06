@@ -62,7 +62,8 @@ void ComputeTempDumbbell::setup()
 
 void ComputeTempDumbbell::dof_compute()
 {
-  dof = 2;  // Dumbbell center of mass can move up/down and left/right
+  natoms_temp = group->count(igroup)/2;   // Number of molecules
+  dof = domain->dimension * natoms_temp;  // Spatial dimensions (2)
   tfactor = force->mvv2e / (dof * force->boltz);
 }
 
@@ -72,6 +73,7 @@ double ComputeTempDumbbell::compute_scalar()
 {
   invoked_scalar = update->ntimestep;
   int i1, i2;
+  double **x = atom->x;
   double **v = atom->v;
   double *mass = atom->mass;
   double vcom [3];  // Center of mass velocity
@@ -84,15 +86,20 @@ double ComputeTempDumbbell::compute_scalar()
   double t = 0.0;
 
   for (int n = 0; n < nbondlist; n++) {
-    i1 = bondlist[n][0];
-    i2 = bondlist[n][1];
+    if (x[bondlist[n][0]][1] < x[bondlist[n][1]][1]) { // Set i1 as left atom
+      i1 = bondlist[n][0];
+      i2 = bondlist[n][1];
+    }
+    else {
+      i2 = bondlist[n][0];
+      i1 = bondlist[n][1];
+    }
     if (i1 < nlocal){  // Only count this dumbbell if first atom is non-ghost
       for (int j=0; j < 3; j++)
         vcom[j] = 0.5*(v[i1][j] + v[i2][j]);
-      t += (vcom[0]*vcom[0] + vcom[1]*vcom[1] + vcom[2]*vcom[2]) * mass[type[i1]];
+      t += (vcom[0]*vcom[0] + vcom[1]*vcom[1] + vcom[2]*vcom[2]) * 2 * mass[type[i1]];
     }
   }
-
   MPI_Allreduce(&t,&scalar,1,MPI_DOUBLE,MPI_SUM,world);
   scalar *= tfactor;
   return scalar;
