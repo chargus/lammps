@@ -176,6 +176,10 @@ void ComputeActiveStress::active_compute()
       factor += 0.5;
     if (i2 < nlocal)
       factor += 0.5;
+    delx = x[i2][0] - x[i1][0];
+    dely = x[i2][1] - x[i1][1];
+    rsq = delx*delx + dely*dely;
+    r = sqrt(rsq);
     T_A[0] += factor * f_active * dely * delx / r;
     T_A[1] += factor * f_active * dely * dely / r;
     T_A[2] -= factor * f_active * delx * delx / r;
