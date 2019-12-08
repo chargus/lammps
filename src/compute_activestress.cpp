@@ -45,7 +45,6 @@ ComputeActiveStress::ComputeActiveStress(LAMMPS *lmp, int narg, char **arg) :
   int dimension = domain->dimension;
   if (dimension != 2) error->all(FLERR,"Only 2D stress tensor is supported.");
 
-  timeflag = 1;
   vector_flag = 1;
   size_vector = 4;      // unraveled 2x2 active stress tensor
   vector = new double[4];
