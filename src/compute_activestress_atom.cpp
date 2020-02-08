@@ -71,7 +71,6 @@ void ComputeActivestressAtom::compute_peratom()
 
   // grow local stress array if necessary
   // needs to be atom->nmax in length
-
   if (atom->nmax > nmax) {
     memory->destroy(stress);
     nmax = atom->nmax;
@@ -79,77 +78,17 @@ void ComputeActivestressAtom::compute_peratom()
     array_atom = stress;
   }
 
-  // npair includes ghosts if either newton flag is set
-  //   b/c some bonds/dihedrals call pair::ev_tally with pairwise info
-  // nbond includes ghosts if newton_bond is set
   // ntotal includes ghosts if either newton flag is set
-
   int nlocal = atom->nlocal;
-  // int npair = nlocal;
-  // int nbond = nlocal;
-  // int ntotal = nlocal;
-  // if (force->newton) npair += atom->nghost;
-  // if (force->newton_bond) nbond += atom->nghost;
-  // if (force->newton) ntotal += atom->nghost;
+  int ntotal = nlocal;
+  if (force->newton) ntotal += atom->nghost;
 
-  // // clear local stress array
-  // for (i = 0; i < ntotal; i++)
-  //   for (j = 0; j < 4; j++)
-  //     stress[i][j] = 0.0;
+  // clear local stress array
+  for (i = 0; i < nlocal; i++)
+    for (j = 0; j < 4; j++)
+      stress[i][j] = 0.0;
 
-  // // add in per-atom contributions from each force
-  // if (pairflag && force->pair) {
-  //   double **vatom = force->pair->vatom;
-  //   for (i = 0; i < npair; i++)
-  //     stress[i][0] += vatom[i][0];
-  //     stress[i][1] += vatom[i][3];
-  //     stress[i][2] += vatom[i][3];
-  //     stress[i][3] += vatom[i][1];
-  // }
-  // if (bondflag && force->bond) {
-  //   double **vatom = force->bond->vatom;
-  //   for (i = 0; i < nbond; i++)
-  //     stress[i][0] += vatom[i][0];
-  //     stress[i][1] += vatom[i][3];
-  //     stress[i][2] += vatom[i][3];
-  //     stress[i][3] += vatom[i][1];
-  // }
-
-  // // communicate ghost virials between neighbor procs
-  // if (force->newton)
-  //   comm->reverse_comm_compute(this);
-
-  // // zero virial of atoms not in group
-  // // only do this after comm since ghost contributions must be included
   int *mask = atom->mask;
-  // for (i = 0; i < nlocal; i++)
-  //   if (!(mask[i] & groupbit)) {
-  //     stress[i][0] = 0.0;
-  //     stress[i][1] = 0.0;
-  //     stress[i][2] = 0.0;
-  //     stress[i][3] = 0.0;
-  //   }
-
-  // // include kinetic energy term for each atom in group
-  // // mvv2e converts mv^2 to energy
-
-  // double **v = atom->v;
-  // double *mass = atom->mass;
-  // double *rmass = atom->rmass;
-  // int *type = atom->type;
-  // double mvv2e = force->mvv2e;
-  // double massone;
-
-  // for (i = 0; i < nlocal; i++)
-  //   if (mask[i] & groupbit) {
-  //     if (rmass) massone = mvv2e * rmass[i];
-  //     else massone = mvv2e * mass[type[i]];
-  //     stress[i][0] += massone * v[i][0]*v[i][0];
-  //     stress[i][1] += massone * v[i][0]*v[i][1];
-  //     stress[i][2] += massone * v[i][1]*v[i][0];
-  //     stress[i][3] += massone * v[i][1]*v[i][1];
-  //   }
-
   // include the asymmetric active force contribution to the stress tensor
   double delx, dely, rsq, r;
   int **bondlist = neighbor->bondlist;
@@ -164,17 +103,17 @@ void ComputeActivestressAtom::compute_peratom()
     rsq = delx*delx + dely*dely;
     r = sqrt(rsq);
 
-    stress[i1][0] += .5 * f_active * dely * delx / r;
-    stress[i2][0] += .5 * f_active * dely * delx / r;
+    if (i1 < nlocal)
+      stress[i1][0] += .5 * f_active * dely * delx / r;
+      stress[i1][1] += .5 * f_active * dely * dely / r;
+      stress[i1][2] += -.5 * f_active * delx * delx / r;
+      stress[i1][3] += -.5 * f_active * delx * dely / r;
 
-    stress[i1][1] += .5 * f_active * dely * dely / r;
-    stress[i2][1] += .5 * f_active * dely * dely / r;
-
-    stress[i1][2] += -.5 * f_active * delx * delx / r;
-    stress[i2][2] += -.5 * f_active * delx * delx / r;
-
-    stress[i1][3] += -.5 * f_active * delx * dely / r;
-    stress[i2][3] += -.5 * f_active * delx * dely / r;
+    if (i2 < nlocal)
+      stress[i2][0] += .5 * f_active * dely * delx / r;
+      stress[i2][1] += .5 * f_active * dely * dely / r;
+      stress[i2][2] += -.5 * f_active * delx * delx / r;
+      stress[i2][3] += -.5 * f_active * delx * dely / r;
   }
 
   // convert to stress*volume units = -pressure*volume
