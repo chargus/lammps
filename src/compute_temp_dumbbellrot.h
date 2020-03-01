@@ -9,42 +9,34 @@
    the GNU General Public License.
 
    See the README file in the top-level LAMMPS directory.
-
-   This file is part of custom LAMMPS code for simulations of active matter.
-    author: Cory Hargus
-    e-mail: hargus@berkeley.edu
-    github: https://github.com/mandadapu-group/active-matter
 ------------------------------------------------------------------------- */
 
 #ifdef COMPUTE_CLASS
 
-ComputeStyle(activestress,ComputeActiveStress)
+ComputeStyle(temp/dumbbellrot,ComputeTempDumbbellRot)
 
 #else
 
-#ifndef LMP_COMPUTE_ACTIVESTRESS_H
-#define LMP_COMPUTE_ACTIVESTRESS_H
+#ifndef LMP_COMPUTE_TEMP_DUMBBELLROT_H
+#define LMP_COMPUTE_TEMP_DUMBBELLROT_H
 
 #include "compute.h"
 
 namespace LAMMPS_NS {
 
-class ComputeActiveStress : public Compute {
+class ComputeTempDumbbellRot : public Compute {
  public:
-  ComputeActiveStress(class LAMMPS *, int, char **);
-  virtual ~ComputeActiveStress();
+  ComputeTempDumbbellRot(class LAMMPS *, int, char **);
+  virtual ~ComputeTempDumbbellRot();
   void init() {}
-  // void setup();
-  // virtual double compute_scalar();
+  void setup();
+  virtual double compute_scalar();
   virtual void compute_vector();
-  // virtual void compute_array();
- protected:
-  bool com;
-  double nktv2p,inv_volume,f_active,factor;
-  // virtual void kinetic_compute();
-  // virtual void virial_compute();
-  virtual void active_compute();
 
+ protected:
+  double tfactor;
+
+  virtual void dof_compute();
 };
 
 }
@@ -59,5 +51,10 @@ E: Illegal ... command
 Self-explanatory.  Check the input script syntax and compare to the
 documentation for the command.  You can use -echo screen as a
 command-line option when running LAMMPS to see the offending line.
+
+E: Temperature compute degrees of freedom < 0
+
+This should not happen if you are calculating the temperature
+on a valid set of atoms.
 
 */

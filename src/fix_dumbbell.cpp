@@ -9,6 +9,11 @@
    the GNU General Public License.
 
    See the README file in the top-level LAMMPS directory.
+
+   This file is part of custom LAMMPS code for simulations of active matter.
+    author: Cory Hargus
+    e-mail: hargus@berkeley.edu
+    github: https://github.com/mandadapu-group/active-matter
 ------------------------------------------------------------------------- */
 #include "stdio.h"
 #include "string.h"
@@ -29,7 +34,7 @@ enum{CCW,CW,MIXED,CONVECT,COM};
 /* ---------------------------------------------------------------------- */
 
 // example command:
-// fix dumbbell ACTIVEFORCE
+// fix dumbbell FORCE_MAGNITUDE FORCE_TYPE
 FixDumbbell::FixDumbbell(LAMMPS *lmp, int narg, char **arg) :
   Fix(lmp, narg, arg)
 {

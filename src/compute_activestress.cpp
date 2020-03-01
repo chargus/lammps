@@ -9,6 +9,11 @@
    the GNU General Public License.
 
    See the README file in the top-level LAMMPS directory.
+
+   This file is part of custom LAMMPS code for simulations of active matter.
+    author: Cory Hargus
+    e-mail: hargus@berkeley.edu
+    github: https://github.com/mandadapu-group/active-matter
 ------------------------------------------------------------------------- */
 
 #include <mpi.h>
@@ -22,9 +27,7 @@
 #include "comm.h"
 #include "group.h"
 #include "error.h"
-
 #include <iostream>
-using namespace std;
 
 using namespace LAMMPS_NS;
 
@@ -34,7 +37,6 @@ Compute the 2x2 active stress tensor for a 2D system of torqued dumbbells.
 Assumes counter-clockwise active torque.
 
 ---------------------------------------------------------------------- */
-
 
 ComputeActiveStress::ComputeActiveStress(LAMMPS *lmp, int narg, char **arg) :
   Compute(lmp, narg, arg)
